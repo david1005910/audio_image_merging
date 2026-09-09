@@ -63,9 +63,11 @@
     // Tabs & Viewports
     el.tabRemotion = document.getElementById('tabRemotionStudio');
     el.tabScene = document.getElementById('tabSceneStudio');
+    el.tabYoutube = document.getElementById('tabYoutubeOverview');
     el.tabClassic = document.getElementById('tabClassicStudio');
     el.viewRemotion = document.getElementById('remotionStudioView');
     el.viewScene = document.getElementById('sceneStudioView');
+    el.viewYoutube = document.getElementById('youtubeOverviewView');
     el.viewClassic = document.getElementById('classicStudioView');
     el.standardGrid = document.getElementById('standardStudioGrid');
     el.previewColumn = document.querySelector('.preview-column');
@@ -163,16 +165,22 @@
   function initTabSwitching() {
     if (el.tabRemotion) el.tabRemotion.addEventListener('click', () => setTab('remotion'));
     if (el.tabScene) el.tabScene.addEventListener('click', () => setTab('scene'));
+    if (el.tabYoutube) el.tabYoutube.addEventListener('click', () => setTab('youtube'));
     if (el.tabClassic) el.tabClassic.addEventListener('click', () => setTab('classic'));
   }
 
   function setTab(tab) {
     state.currentTab = tab;
+
+    // Reset all tab active classes
+    [el.tabRemotion, el.tabScene, el.tabYoutube, el.tabClassic].forEach(t => {
+      if (t) t.classList.remove('active');
+    });
+
     if (tab === 'remotion') {
       if (el.tabRemotion) el.tabRemotion.classList.add('active');
-      if (el.tabScene) el.tabScene.classList.remove('active');
-      if (el.tabClassic) el.tabClassic.classList.remove('active');
       if (el.viewRemotion) el.viewRemotion.style.display = 'block';
+      if (el.viewYoutube) el.viewYoutube.style.display = 'none';
       if (el.standardGrid) el.standardGrid.style.display = 'none';
 
       // Move monitor, results, library to remotion shared anchor
@@ -186,9 +194,14 @@
         window.remotionApp.renderTimeline();
         window.remotionApp.renderCanvas();
       }
-    } else {
-      if (el.tabRemotion) el.tabRemotion.classList.remove('active');
+    } else if (tab === 'youtube') {
+      if (el.tabYoutube) el.tabYoutube.classList.add('active');
+      if (el.viewYoutube) el.viewYoutube.style.display = 'block';
       if (el.viewRemotion) el.viewRemotion.style.display = 'none';
+      if (el.standardGrid) el.standardGrid.style.display = 'none';
+    } else {
+      if (el.viewRemotion) el.viewRemotion.style.display = 'none';
+      if (el.viewYoutube) el.viewYoutube.style.display = 'none';
       if (el.standardGrid) el.standardGrid.style.display = 'grid';
 
       // Move monitor, results, library back to preview column
@@ -199,15 +212,13 @@
       }
 
       if (tab === 'scene') {
-        el.tabScene.classList.add('active');
-        el.tabClassic.classList.remove('active');
+        if (el.tabScene) el.tabScene.classList.add('active');
         el.viewScene.style.display = 'block';
         el.viewClassic.style.display = 'none';
         el.previewModeBadge.textContent = 'SCENE PREVIEW';
         el.previewSceneIndicator.style.display = 'block';
       } else {
-        el.tabClassic.classList.add('active');
-        el.tabScene.classList.remove('active');
+        if (el.tabClassic) el.tabClassic.classList.add('active');
         el.viewClassic.style.display = 'block';
         el.viewScene.style.display = 'none';
         el.previewModeBadge.textContent = 'CLASSIC PREVIEW';

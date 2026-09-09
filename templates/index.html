@@ -44,6 +44,12 @@
         </svg>
         <span>📝 씬 & 나레이션 자막 스튜디오 (Multi-Scene Subtitles)</span>
       </button>
+      <button type="button" class="studio-tab-btn" id="tabYoutubeOverview" data-tab="youtube">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+        </svg>
+        <span>🎙️ YouTube AI 오버뷰 (Audio Overview)</span>
+      </button>
       <button type="button" class="studio-tab-btn" id="tabClassicStudio" data-tab="classic">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M3 17h2v-4H3v4zm4 4h2V7H7v14zm4-8h2V3h-2v10zm4 4h2V9h-2v8zm4-2h2v-4h-2v4z"/>
@@ -267,6 +273,135 @@
 
       <!-- Shared Anchor for Monitor, Results, and Library -->
       <div id="remotionSharedAnchor"></div>
+    </div>
+
+    <!-- ===================================================
+         MODE 4: YouTube Multi-Source AI Audio Overview
+         =================================================== -->
+    <div id="youtubeOverviewView" class="youtube-overview-view" style="display: none;">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="color:#ff0033">
+              <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
+            </svg>
+            <span>다중 YouTube 영상 소스 입력 & AI Audio Overview 생성</span>
+          </div>
+          <span class="panel-hint">Google NotebookLM 스타일 2인 팟캐스트 합성</span>
+        </div>
+
+        <div class="yt-input-layout">
+          <div class="yt-form-column">
+            <div class="form-group">
+              <label class="form-label" for="ytUrlsInput">
+                <span>분석할 YouTube 영상 링크들 (다중 입력 가능)</span>
+                <span class="req-badge">필수</span>
+              </label>
+              <textarea id="ytUrlsInput" class="form-textarea yt-urls-textarea" rows="4" placeholder="분석하고 싶은 YouTube 영상 URL을 한 줄에 하나씩 입력하세요.&#10;예시:&#10;https://www.youtube.com/watch?v=dQw4w9WgXcQ&#10;https://youtu.be/example_video_2"></textarea>
+              <div class="form-hint">여러 개의 영상을 입력하면 AI가 영상 간의 공통점과 상반된 시각을 심층 비교·분석합니다.</div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="ytApiKeyInput">
+                  <span>Google Gemini API Key</span>
+                  <span class="opt-badge">선택 (미입력 시 스마트 분석 템플릿 동작)</span>
+                </label>
+                <input type="password" id="ytApiKeyInput" class="form-input" placeholder="AI Studio Gemini API Key 입력 (브라우저 안전 보관)">
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="ytLanguageSelect">진행 언어</label>
+                <select id="ytLanguageSelect" class="form-select">
+                  <option value="ko" selected>한국어 (민수 & 지우)</option>
+                  <option value="en">English (Alex & Sarah)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="ytToneSelect">팟캐스트 스타일</label>
+                <select id="ytToneSelect" class="form-select">
+                  <option value="deep_dive" selected>심층 분석 (Deep Dive)</option>
+                  <option value="summary">핵심 요약 (Summary)</option>
+                  <option value="debate">토론형 (Debate)</option>
+                </select>
+              </div>
+            </div>
+
+            <button type="button" class="btn-generate btn-yt-generate" id="btnGenerateYtOverview">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+              </svg>
+              <span>🎙️ YouTube AI Audio Overview 생성 시작</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Progress Box -->
+        <div class="yt-monitor-box" id="ytMonitorBox" style="display: none;">
+          <div class="progress-header">
+            <div class="stage-badge" id="ytStageBadge">
+              <span class="status-beacon"></span>
+              <span id="ytStageText">YouTube 자막 및 메타데이터 수집 중...</span>
+            </div>
+            <div class="percentage-text" id="ytPercentText">10%</div>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill" id="ytProgressFill" style="width: 10%;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Result Container -->
+      <div class="panel yt-result-section" id="ytResultSection" style="display: none;">
+        <div class="panel-header">
+          <div class="panel-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="color:var(--accent-emerald)">
+              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+            </svg>
+            <span>생성된 AI Audio Overview (팟캐스트)</span>
+          </div>
+          <div class="yt-result-actions">
+            <a id="ytBtnDownloadAudio" class="btn-lib-action" download="audio_overview.mp3">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+              <span>오디오 다운로드 (.mp3)</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Audio Player & Visualizer Bar -->
+        <div class="yt-player-box">
+          <audio id="ytAudioPlayer" controls class="yt-audio-element"></audio>
+        </div>
+
+        <!-- 1-Click Studio Bridges -->
+        <div class="yt-studio-bridges">
+          <button type="button" class="btn-bridge-remotion" id="ytBtnSendToRemotion">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zM12 5.5v9l6-4.5-6-4.5z"/>
+            </svg>
+            <span>🎬 Remotion 멀티트랙 스튜디오로 열기 (비주얼+오디오+자막 자동 배치)</span>
+          </button>
+          <button type="button" class="btn-bridge-scene" id="ytBtnSendToScene">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/>
+            </svg>
+            <span>📝 씬 & 자막 스튜디오로 대본 전달</span>
+          </button>
+        </div>
+
+        <!-- Analyzed Sources Grid -->
+        <div class="yt-sources-section">
+          <div class="form-label" style="margin-bottom: 10px;">분석된 YouTube 영상 소스</div>
+          <div class="yt-sources-grid" id="ytSourcesList"></div>
+        </div>
+
+        <!-- 2-Host Dialogue Transcript -->
+        <div class="yt-dialogue-section">
+          <div class="form-label" style="margin-bottom: 12px;">2인 대화 팟캐스트 스크립트 (타임스탬프 클릭 시 해당 구간 재생)</div>
+          <div class="yt-dialogue-list" id="ytDialogueList"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Main Studio Grid (Scene & Classic) -->
@@ -792,6 +927,7 @@
 
   <script src="/static/js/audio_preview.js"></script>
   <script src="/static/js/remotion_editor.js"></script>
+  <script src="/static/js/youtube_overview.js"></script>
   <script src="/static/js/app.js"></script>
 </body>
 </html>

@@ -8,6 +8,7 @@ Python scripts that shell out to `ffmpeg` to produce 1080p MP4 videos from audio
 
 ## Entry points
 - **`webui.py`** — Fullstack HTTP server (stdlib `ThreadingHTTPServer`) with a modern Korean-language studio Web UI (`http://127.0.0.1:8080`). Run: `python webui.py [port]` (default `8080`).
+- **`youtube_audio_overview.py`** — NotebookLM-style multi-source YouTube transcript extractor, Google Gemini AI 2-host podcast dialog generator, Edge-TTS audio synthesizer, and Remotion timeline exporter.
 - **`remotion_engine.py`** — Remotion-style multi-track timeline video compiler (visual, audio, subtitle tracks) to 1080p MP4.
 - **`scene_video.py`** — Multi-scene narration subtitle video generator with auto-sentence distribution.
 - `waveform_video.py` — audio → waveform visualization (`showwaves`, `mode=cline`). Supports custom `wave_color` and real-time progress callbacks.
@@ -17,19 +18,23 @@ Python scripts that shell out to `ffmpeg` to produce 1080p MP4 videos from audio
 
 ## Fullstack WebUI Architecture
 - **Templates & Static Assets**:
-  - `templates/index.html` — Semantic HTML5 studio UI with drag-and-drop, real-time live layout preview, and in-browser video player modal.
-  - `static/css/style.css` — Modern dark glassmorphism design system (`Inter`, `JetBrains Mono`, neon glows).
+  - `templates/index.html` — Semantic HTML5 studio UI with drag-and-drop, Remotion timeline editor, Scene subtitle editor, YouTube AI Audio Overview, and in-browser video player modal.
+  - `static/css/style.css` — Modern dark glassmorphism design system (`Inter`, `JetBrains Mono`, neon glows, dialogue chat bubbles).
   - `static/js/app.js` — Frontend state machine, canvas layout mockup renderer, REST API polling, and library manager.
+  - `static/js/remotion_editor.js` — Remotion-style multi-track timeline editor frontend engine.
+  - `static/js/youtube_overview.js` — Multi-YouTube analyzer, Gemini API key manager, 2-host audio player & interactive transcript viewer, 1-click Remotion/Scene Studio bridge.
   - `static/js/audio_preview.js` — In-browser Web Audio API waveform visualizer and audio playback previewer.
 - **REST API Endpoints**:
   - `GET /` — Serves `templates/index.html`.
   - `GET /static/*` — Serves static CSS, JS, and image assets with MIME type detection.
-  - `POST /api/run` — Multipart upload (`audio`, `image`, `tasks`, `wave_color`, `opacity`, `wave_height`, `position`). Returns `{"id": job_id}`.
+  - `POST /api/run` — Multipart upload (`audio`, `image`, `tasks`, `wave_color`, `opacity`, `wave_height`, `position`, `remotion_timeline`, `scenes`). Returns `{"id": job_id}`.
   - `GET /api/status?id=<id>` — Returns job status, percentage (0-100%), current task, log output, and results.
   - `POST /api/cancel?id=<id>` — Cancels running job and terminates FFmpeg process.
+  - `POST /api/youtube/generate` — JSON payload (`urls`, `gemini_api_key`, `language`, `tone`). Generates 2-host podcast audio + script + Remotion timeline. Returns `{"id": job_id}`.
+  - `GET /api/youtube/status?id=<id>` — Returns YouTube job progress, stages, generated audio URL, script, thumbnails, and Remotion timeline data.
   - `GET /api/files` — Returns list of generated MP4 files with metadata.
   - `DELETE /api/files/<name>` — Deletes generated file from `outputs/`.
-  - `GET /download/<name>` — Streams video with HTTP Range header support (`206 Partial Content`).
+  - `GET /download/<name>` — Streams video and audio (`.mp4`, `.mp3`, `.jpg`) with HTTP Range header support (`206 Partial Content`).
 - `uploads/` and `outputs/` are created at startup and hold per-job artifacts.
 - Job queueing uses `RUN_LOCK` (`threading.Lock`) so jobs run sequentially.
 

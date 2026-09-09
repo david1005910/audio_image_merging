@@ -16,6 +16,11 @@ from waveform_video import create_waveform_video
 from waveform_overlay_video import create_waveform_overlay_video
 from scene_video import create_scene_video
 from remotion_engine import render_timeline
+from youtube_audio_overview import (
+    process_youtube_urls,
+    generate_podcast_script_gemini,
+    synthesize_podcast_audio_and_timeline
+)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -34,6 +39,9 @@ os.makedirs(TEMPLATES_DIR, exist_ok=True)
 JOBS = {}
 JOBS_LOCK = threading.Lock()
 RUN_LOCK = threading.Lock()
+
+YT_JOBS = {}
+YT_LOCK = threading.Lock()
 
 MIME_MAP = {
     ".html": "text/html; charset=utf-8",
@@ -123,6 +131,9 @@ def _run_job(job_id):
 
                 # 비주얼 파일들 디스크에 저장
                 for idx, v in enumerate(timeline.get("visual_track", [])):
+                    if v.get("file_path") and os.path.isfile(v.get("file_path")):
+                        v["media_path"] = v["file_path"]
+                        continue
                     field_name = v.get("file_field") or f"visual_file_{idx}"
                     file_obj = form.get(field_name)
                     if isinstance(file_obj, dict) and file_obj.get("data"):
@@ -134,6 +145,9 @@ def _run_job(job_id):
 
                 # 오디오 파일들 디스크에 저장
                 for idx, a in enumerate(timeline.get("audio_track", [])):
+                    if a.get("file_path") and os.path.isfile(a.get("file_path")):
+                        a["media_path"] = a["file_path"]
+                        continue
                     field_name = a.get("file_field") or f"audio_file_{idx}"
                     file_obj = form.get(field_name)
                     if isinstance(file_obj, dict) and file_obj.get("data"):
@@ -362,6 +376,73 @@ def _run_job(job_id):
             job["finished"] = time.time()
 
 
+def _run_youtube_job(job_id, urls, api_key, language, tone):
+    with YT_LOCK:
+        job = YT_JOBS.get(job_id)
+    if not job:
+        return
+    job["status"] = "running"
+
+    def progress_cb(pct, msg):
+        with YT_LOCK:
+            job["progress"] = pct
+            job["stage"] = msg
+
+    try:
+        progress_cb(5, "YouTube 영상 목록 파싱 및 소스 수집 준비 중...")
+        job_dir = os.path.join(UPLOAD_DIR, f"yt_{job_id}")
+        os.makedirs(job_dir, exist_ok=True)
+
+        progress_cb(15, "YouTube 메타데이터 및 자막 스크립트 수집 중...")
+        sources = process_youtube_urls(urls, job_dir)
+        if not sources:
+            raise ValueError("입력된 YouTube URL에서 유효한 영상을 찾을 수 없습니다.")
+
+        progress_cb(35, f"{len(sources)}개 영상 분석 완료. Gemini AI 2인 대본 작성 중...")
+        script = generate_podcast_script_gemini(sources, api_key, language, tone)
+        if not script:
+            raise ValueError("팟캐스트 대본 생성에 실패했습니다.")
+
+        progress_cb(50, "듀얼 스피커 음성 합성 (Edge-TTS) 준비 중...")
+        out_mp3_path = os.path.join(OUTPUT_DIR, f"yt_podcast_{job_id}.mp3")
+
+        result = synthesize_podcast_audio_and_timeline(
+            script_turns=script,
+            sources=sources,
+            output_mp3_path=out_mp3_path,
+            language=language,
+            progress_callback=progress_cb
+        )
+
+        with YT_LOCK:
+            job["status"] = "done"
+            job["progress"] = 100
+            job["stage"] = "✨ AI Audio Overview 완성!"
+            job["result"] = {
+                "audio_url": f"/download/{os.path.basename(out_mp3_path)}",
+                "audio_file": out_mp3_path,
+                "duration": result["duration"],
+                "script": result["script"],
+                "subtitles": result["subtitles"],
+                "timeline_data": result["timeline_data"],
+                "sources": [
+                    {
+                        "title": s.get("title"),
+                        "author": s.get("author"),
+                        "video_id": s.get("video_id"),
+                        "url": s.get("url"),
+                        "thumbnail_url": s.get("thumbnail_url"),
+                        "thumbnail_file": s.get("thumbnail_file")
+                    } for s in sources
+                ]
+            }
+    except Exception as e:
+        with YT_LOCK:
+            job["status"] = "error"
+            job["error"] = str(e)
+            job["stage"] = f"오류 발생: {e}"
+
+
 def parse_multipart(body, content_type):
     m = re.search(r'boundary=(?:"([^"]+)"|([^;]+))', content_type or "")
     if not m:
@@ -509,7 +590,25 @@ class Handler(BaseHTTPRequestHandler):
             })
             return
 
-        # Video Download / Streaming
+        # API: YouTube Audio Overview Job Status
+        if path == "/api/youtube/status":
+            jid = (parse_qs(parsed.query).get("id") or [""])[0]
+            with YT_LOCK:
+                job = YT_JOBS.get(jid)
+            if not job:
+                self._send_json(404, {"error": "작업을 찾을 수 없습니다."})
+                return
+            self._send_json(200, {
+                "id": job["id"],
+                "status": job["status"],
+                "progress": job.get("progress", 0),
+                "stage": job.get("stage", ""),
+                "error": job.get("error"),
+                "result": job.get("result")
+            })
+            return
+
+        # Video / Audio Download / Streaming
         if path.startswith("/download/"):
             name = unquote(path[len("/download/"):])
             if not name or "/" in name or "\\" in name or ".." in name:
@@ -517,9 +616,15 @@ class Handler(BaseHTTPRequestHandler):
                 return
             full = os.path.join(OUTPUT_DIR, name)
             if not os.path.isfile(full):
-                self._send_json(404, {"error": "파일을 찾을 수 없습니다."})
-                return
-            self._send_file(full, "video/mp4")
+                full_up = os.path.join(UPLOAD_DIR, name)
+                if os.path.isfile(full_up):
+                    full = full_up
+                else:
+                    self._send_json(404, {"error": "파일을 찾을 수 없습니다."})
+                    return
+            ext = os.path.splitext(full)[1].lower()
+            mime = MIME_MAP.get(ext, "application/octet-stream")
+            self._send_file(full, mime)
             return
 
         self._send_json(404, {"error": "경로를 찾을 수 없습니다."})
@@ -527,6 +632,46 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path
+
+        # API: Generate YouTube AI Audio Overview
+        if path == "/api/youtube/generate":
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                body = self.rfile.read(length)
+                data = json.loads(body.decode("utf-8"))
+            except Exception as e:
+                self._send_json(400, {"error": f"잘못된 JSON 요청입니다: {e}"})
+                return
+
+            urls = data.get("urls", [])
+            if not isinstance(urls, list) or len(urls) == 0:
+                self._send_json(400, {"error": "최소 1개 이상의 YouTube URL이 필요합니다."})
+                return
+
+            api_key = str(data.get("api_key") or "").strip() or None
+            language = str(data.get("language") or "ko")
+            tone = str(data.get("tone") or "deep_dive")
+
+            job_id = uuid.uuid4().hex[:12]
+            with YT_LOCK:
+                YT_JOBS[job_id] = {
+                    "id": job_id,
+                    "status": "pending",
+                    "progress": 0,
+                    "stage": "대기 중...",
+                    "error": None,
+                    "result": None,
+                    "created": time.time()
+                }
+
+            threading.Thread(
+                target=_run_youtube_job,
+                args=(job_id, urls, api_key, language, tone),
+                daemon=True
+            ).start()
+
+            self._send_json(200, {"id": job_id})
+            return
 
         # API: Start Rendering Job
         if path == "/api/run":
