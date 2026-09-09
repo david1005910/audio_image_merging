@@ -192,22 +192,59 @@ body::after {
   100% { transform: scale(0.95); opacity: 0.8; }
 }
 
+/* Header Quick CTA Button */
+.btn-quick-notebooklm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(255, 0, 128, 0.18), rgba(121, 40, 202, 0.18));
+  border: 1px solid rgba(255, 0, 128, 0.5);
+  color: #ffffff;
+  padding: 7px 16px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: 0 2px 14px rgba(255, 0, 128, 0.25);
+}
+
+.btn-quick-notebooklm:hover {
+  background: linear-gradient(135deg, rgba(255, 0, 128, 0.35), rgba(121, 40, 202, 0.35));
+  border-color: rgba(255, 0, 128, 0.9);
+  box-shadow: 0 4px 22px rgba(255, 0, 128, 0.45);
+  transform: translateY(-1px);
+}
+
+.btn-quick-notebooklm .sparkle-icon {
+  animation: sparkle-spin 3s ease-in-out infinite;
+  display: inline-block;
+}
+
+@keyframes sparkle-spin {
+  0% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.25) rotate(180deg); }
+  100% { transform: scale(1) rotate(360deg); }
+}
+
 /* Top Studio Mode Tabs */
 .studio-tabs {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
   margin-bottom: 24px;
   background: var(--bg-surface);
   backdrop-filter: blur(12px);
-  padding: 6px;
+  padding: 8px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
-  width: fit-content;
+  width: 100%;
 }
 
 .studio-tab-btn {
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   color: var(--text-muted);
   font-size: 13px;
   font-weight: 600;
@@ -230,6 +267,87 @@ body::after {
   color: #050811;
   font-weight: 700;
   box-shadow: 0 2px 14px rgba(0, 242, 254, 0.35);
+  border-color: transparent;
+}
+
+/* Special Highlighting for NotebookLM YouTube Tab */
+.studio-tab-btn.highlight-tab-yt {
+  border: 1px solid rgba(255, 0, 128, 0.45);
+  background: rgba(255, 0, 128, 0.08);
+  color: #ffb3d9;
+}
+
+.studio-tab-btn.highlight-tab-yt:hover {
+  background: rgba(255, 0, 128, 0.16);
+  color: #ffffff;
+  box-shadow: 0 0 16px rgba(255, 0, 128, 0.3);
+}
+
+.studio-tab-btn.highlight-tab-yt.active {
+  background: linear-gradient(135deg, #ff007f 0%, #7928ca 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 22px rgba(255, 0, 128, 0.5) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.tab-highlight-badge {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, #ff0080, #7928ca);
+  color: #ffffff;
+  box-shadow: 0 0 8px rgba(255, 0, 128, 0.6);
+  animation: pulse-badge 2s infinite;
+}
+
+@keyframes pulse-badge {
+  0% { transform: scale(0.96); opacity: 0.9; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(0.96); opacity: 0.9; }
+}
+
+/* NotebookLM Feature Intro Banner */
+.yt-feature-banner {
+  background: linear-gradient(135deg, rgba(255, 0, 128, 0.08) 0%, rgba(121, 40, 202, 0.08) 50%, rgba(0, 242, 254, 0.05) 100%);
+  border: 1px solid rgba(255, 0, 128, 0.25);
+  border-radius: var(--radius-md);
+  padding: 18px 22px;
+  margin-bottom: 24px;
+}
+
+.yt-feature-banner .banner-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #ff0080;
+  background: rgba(255, 0, 128, 0.12);
+  border: 1px solid rgba(255, 0, 128, 0.3);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  margin-bottom: 8px;
+}
+
+.yt-feature-banner h3 {
+  font-size: 17px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 6px;
+}
+
+.yt-feature-banner p {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.yt-feature-banner p strong {
+  color: var(--accent-cyan);
 }
 
 /* Grid Layout */

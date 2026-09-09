@@ -511,8 +511,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(length))
         if rng:
             self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
-        self.send_header("Accept-Ranges", "bytes")
-        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
         self.end_headers()
 
         with open(full, "rb") as f:

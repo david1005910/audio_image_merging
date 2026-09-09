@@ -56,7 +56,21 @@
     initClassicStudio();
     initCommonFeatures();
     fetchLibraryFiles();
-    setTab('remotion');
+
+    // Determine initial tab from URL hash or localStorage, default to 'youtube' for AI Overview discovery
+    const hash = (window.location.hash || '').replace('#', '').toLowerCase();
+    const storedTab = localStorage.getItem('wave_active_tab');
+    let initialTab = 'youtube';
+
+    if (['youtube', 'notebooklm', 'overview'].includes(hash)) {
+      initialTab = 'youtube';
+    } else if (['remotion', 'scene', 'classic'].includes(hash)) {
+      initialTab = hash;
+    } else if (storedTab && ['youtube', 'remotion', 'scene', 'classic'].includes(storedTab)) {
+      initialTab = storedTab;
+    }
+
+    setTab(initialTab);
   });
 
   function initDOMElements() {
@@ -65,6 +79,7 @@
     el.tabScene = document.getElementById('tabSceneStudio');
     el.tabYoutube = document.getElementById('tabYoutubeOverview');
     el.tabClassic = document.getElementById('tabClassicStudio');
+    el.btnQuickNotebookLM = document.getElementById('btnQuickNotebookLM');
     el.viewRemotion = document.getElementById('remotionStudioView');
     el.viewScene = document.getElementById('sceneStudioView');
     el.viewYoutube = document.getElementById('youtubeOverviewView');
@@ -167,10 +182,36 @@
     if (el.tabScene) el.tabScene.addEventListener('click', () => setTab('scene'));
     if (el.tabYoutube) el.tabYoutube.addEventListener('click', () => setTab('youtube'));
     if (el.tabClassic) el.tabClassic.addEventListener('click', () => setTab('classic'));
+
+    if (el.btnQuickNotebookLM) {
+      el.btnQuickNotebookLM.addEventListener('click', () => {
+        setTab('youtube');
+        const viewEl = document.getElementById('youtubeOverviewView');
+        if (viewEl) viewEl.scrollIntoView({ behavior: 'smooth' });
+      });
+    }
+
+    window.addEventListener('hashchange', () => {
+      const h = (window.location.hash || '').replace('#', '').toLowerCase();
+      if (['youtube', 'notebooklm', 'overview'].includes(h)) {
+        setTab('youtube');
+      } else if (['remotion', 'scene', 'classic'].includes(h)) {
+        setTab(h);
+      }
+    });
   }
 
   function setTab(tab) {
     state.currentTab = tab;
+
+    try {
+      localStorage.setItem('wave_active_tab', tab);
+      if (window.location.hash !== '#' + tab) {
+        history.replaceState(null, '', '#' + tab);
+      }
+    } catch (e) {
+      // Ignore storage errors
+    }
 
     // Reset all tab active classes
     [el.tabRemotion, el.tabScene, el.tabYoutube, el.tabClassic].forEach(t => {

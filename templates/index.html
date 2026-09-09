@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WaveStudio Pro | 씬별 나레이션 자막 & 오디오 비디오 생성기</title>
   <meta name="description" content="나레이션 대본 텍스트를 업로드하여 이미지 및 동영상 씬에 맞추어 자막을 자동 배분하고 고화질 1080p 비디오를 렌더링하는 풀스택 웹 스튜디오입니다.">
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/style.css?v=3.2">
 </head>
 <body>
   <div class="app-wrapper">
@@ -23,6 +23,10 @@
         </div>
       </div>
       <div class="header-meta">
+        <button type="button" class="btn-quick-notebooklm" id="btnQuickNotebookLM" title="동영상 사이트(YouTube)를 입력하여 NotebookLM 스타일 2인 팟캐스트 AI Audio Overview 생성 화면으로 바로 이동">
+          <span class="sparkle-icon">✨</span>
+          <span>NotebookLM 동영상 AI 오버뷰 바로가기</span>
+        </button>
         <div class="status-pill">
           <span class="status-beacon"></span>
           <span>엔진 대기 중 (Ready)</span>
@@ -32,6 +36,13 @@
 
     <!-- Top Mode Switch Tabs -->
     <div class="studio-tabs">
+      <button type="button" class="studio-tab-btn highlight-tab-yt" id="tabYoutubeOverview" data-tab="youtube">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+        </svg>
+        <span>🎙️ NotebookLM 동영상 AI 오버뷰 (Audio Overview)</span>
+        <span class="tab-highlight-badge">AI 팟캐스트</span>
+      </button>
       <button type="button" class="studio-tab-btn active" id="tabRemotionStudio" data-tab="remotion">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zM12 5.5v9l6-4.5-6-4.5z"/>
@@ -43,12 +54,6 @@
           <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/>
         </svg>
         <span>📝 씬 & 나레이션 자막 스튜디오 (Multi-Scene Subtitles)</span>
-      </button>
-      <button type="button" class="studio-tab-btn" id="tabYoutubeOverview" data-tab="youtube">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
-        </svg>
-        <span>🎙️ YouTube AI 오버뷰 (Audio Overview)</span>
       </button>
       <button type="button" class="studio-tab-btn" id="tabClassicStudio" data-tab="classic">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -282,12 +287,23 @@
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="color:#ff0033">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="color:#ff0055">
               <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
             </svg>
-            <span>다중 YouTube 영상 소스 입력 & AI Audio Overview 생성</span>
+            <span>🎙️ NotebookLM 동영상(YouTube) 교차 분석 & 2인 진행자 AI Audio Overview</span>
           </div>
-          <span class="panel-hint">Google NotebookLM 스타일 2인 팟캐스트 합성</span>
+          <span class="panel-hint">Google NotebookLM 스타일 팟캐스트 합성</span>
+        </div>
+
+        <!-- Feature Intro Banner -->
+        <div class="yt-feature-banner">
+          <div class="banner-badge">Google NotebookLM Style AI Overview</div>
+          <h3>다중 동영상(YouTube) 교차 분석 & 2인 진행자 AI Audio Overview</h3>
+          <p>
+            분석하고 싶은 YouTube 영상 링크를 아래에 입력하세요. 
+            Google Gemini AI가 영상의 핵심 논점과 인사이트를 비교 분석하고, 
+            Edge-TTS 한국어 남녀 2인 진행자(<strong>민수 & 지우</strong>)의 자연스러운 대화형 팟캐스트 오디오와 Remotion 멀티트랙 타임라인을 자동 생성합니다.
+          </p>
         </div>
 
         <div class="yt-input-layout">
@@ -925,9 +941,9 @@
     </div>
   </div>
 
-  <script src="/static/js/audio_preview.js"></script>
-  <script src="/static/js/remotion_editor.js"></script>
-  <script src="/static/js/youtube_overview.js"></script>
-  <script src="/static/js/app.js"></script>
+  <script src="/static/js/audio_preview.js?v=3.2"></script>
+  <script src="/static/js/remotion_editor.js?v=3.2"></script>
+  <script src="/static/js/youtube_overview.js?v=3.2"></script>
+  <script src="/static/js/app.js?v=3.2"></script>
 </body>
 </html>
