@@ -8,6 +8,8 @@ Python scripts that shell out to `ffmpeg` to produce 1080p MP4 videos from audio
 
 ## Entry points
 - **`webui.py`** — Fullstack HTTP server (stdlib `ThreadingHTTPServer`) with a modern Korean-language studio Web UI (`http://127.0.0.1:8080`). Run: `python webui.py [port]` (default `8080`).
+- **`remotion_engine.py`** — Remotion-style multi-track timeline video compiler (visual, audio, subtitle tracks) to 1080p MP4.
+- **`scene_video.py`** — Multi-scene narration subtitle video generator with auto-sentence distribution.
 - `waveform_video.py` — audio → waveform visualization (`showwaves`, `mode=cline`). Supports custom `wave_color` and real-time progress callbacks.
 - `waveform_overlay_video.py` — background image + semi-transparent waveform overlay with positioning (top/center/bottom).
 - `static_video.py` — still image + audio → MP4 (loop + scale/pad to 1920×1080).
