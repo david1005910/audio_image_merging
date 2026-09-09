@@ -8,7 +8,7 @@
 
   // Global State
   const state = {
-    currentTab: 'scene', // 'scene' | 'classic'
+    currentTab: 'remotion', // 'remotion' | 'scene' | 'classic'
 
     // Scene Studio State
     sceneAudioFile: null,
@@ -56,14 +56,21 @@
     initClassicStudio();
     initCommonFeatures();
     fetchLibraryFiles();
+    setTab('remotion');
   });
 
   function initDOMElements() {
-    // Tabs
+    // Tabs & Viewports
+    el.tabRemotion = document.getElementById('tabRemotionStudio');
     el.tabScene = document.getElementById('tabSceneStudio');
     el.tabClassic = document.getElementById('tabClassicStudio');
+    el.viewRemotion = document.getElementById('remotionStudioView');
     el.viewScene = document.getElementById('sceneStudioView');
     el.viewClassic = document.getElementById('classicStudioView');
+    el.standardGrid = document.getElementById('standardStudioGrid');
+    el.previewColumn = document.querySelector('.preview-column');
+    el.libraryPanel = document.getElementById('libraryPanel');
+    el.remotionSharedAnchor = document.getElementById('remotionSharedAnchor');
 
     // Scene Studio
     el.sceneAudioDrop = document.getElementById('sceneAudioDrop');
@@ -154,29 +161,61 @@
   // Tab Switching
   // ==========================================
   function initTabSwitching() {
-    el.tabScene.addEventListener('click', () => setTab('scene'));
-    el.tabClassic.addEventListener('click', () => setTab('classic'));
+    if (el.tabRemotion) el.tabRemotion.addEventListener('click', () => setTab('remotion'));
+    if (el.tabScene) el.tabScene.addEventListener('click', () => setTab('scene'));
+    if (el.tabClassic) el.tabClassic.addEventListener('click', () => setTab('classic'));
   }
 
   function setTab(tab) {
     state.currentTab = tab;
-    if (tab === 'scene') {
-      el.tabScene.classList.add('active');
-      el.tabClassic.classList.remove('active');
-      el.viewScene.style.display = 'block';
-      el.viewClassic.style.display = 'none';
-      el.previewModeBadge.textContent = 'SCENE PREVIEW';
-      el.previewSceneIndicator.style.display = 'block';
+    if (tab === 'remotion') {
+      if (el.tabRemotion) el.tabRemotion.classList.add('active');
+      if (el.tabScene) el.tabScene.classList.remove('active');
+      if (el.tabClassic) el.tabClassic.classList.remove('active');
+      if (el.viewRemotion) el.viewRemotion.style.display = 'block';
+      if (el.standardGrid) el.standardGrid.style.display = 'none';
+
+      // Move monitor, results, library to remotion shared anchor
+      if (el.remotionSharedAnchor) {
+        if (el.monitorPanel) el.remotionSharedAnchor.appendChild(el.monitorPanel);
+        if (el.resultsContainer) el.remotionSharedAnchor.appendChild(el.resultsContainer);
+        if (el.libraryPanel) el.remotionSharedAnchor.appendChild(el.libraryPanel);
+      }
+
+      if (window.remotionApp) {
+        window.remotionApp.renderTimeline();
+        window.remotionApp.renderCanvas();
+      }
     } else {
-      el.tabClassic.classList.add('active');
-      el.tabScene.classList.remove('active');
-      el.viewClassic.style.display = 'block';
-      el.viewScene.style.display = 'none';
-      el.previewModeBadge.textContent = 'CLASSIC PREVIEW';
-      el.previewSceneIndicator.style.display = 'none';
+      if (el.tabRemotion) el.tabRemotion.classList.remove('active');
+      if (el.viewRemotion) el.viewRemotion.style.display = 'none';
+      if (el.standardGrid) el.standardGrid.style.display = 'grid';
+
+      // Move monitor, results, library back to preview column
+      if (el.previewColumn) {
+        if (el.monitorPanel) el.previewColumn.appendChild(el.monitorPanel);
+        if (el.resultsContainer) el.previewColumn.appendChild(el.resultsContainer);
+        if (el.libraryPanel) el.previewColumn.appendChild(el.libraryPanel);
+      }
+
+      if (tab === 'scene') {
+        el.tabScene.classList.add('active');
+        el.tabClassic.classList.remove('active');
+        el.viewScene.style.display = 'block';
+        el.viewClassic.style.display = 'none';
+        el.previewModeBadge.textContent = 'SCENE PREVIEW';
+        el.previewSceneIndicator.style.display = 'block';
+      } else {
+        el.tabClassic.classList.add('active');
+        el.tabScene.classList.remove('active');
+        el.viewClassic.style.display = 'block';
+        el.viewScene.style.display = 'none';
+        el.previewModeBadge.textContent = 'CLASSIC PREVIEW';
+        el.previewSceneIndicator.style.display = 'none';
+      }
+      updateGenerateButtonState();
+      renderLivePreview();
     }
-    updateGenerateButtonState();
-    renderLivePreview();
   }
 
   // ==========================================

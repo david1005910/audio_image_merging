@@ -15,6 +15,7 @@ from static_video import create_static_video
 from waveform_video import create_waveform_video
 from waveform_overlay_video import create_waveform_overlay_video
 from scene_video import create_scene_video
+from remotion_engine import render_timeline
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -23,7 +24,7 @@ UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
 MAX_UPLOAD_BYTES = 512 * 1024 * 1024
 
-TASKS = ("waveform", "waveform_overlay", "static", "scene_subtitles")
+TASKS = ("waveform", "waveform_overlay", "static", "scene_subtitles", "remotion_render")
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -109,6 +110,71 @@ def _run_job(job_id):
 
         try:
             form = job["form"]
+            tasks = [t.strip() for t in str(form.get("tasks") or "").split(",") if t.strip() in TASKS]
+            if not tasks:
+                raise ValueError("선택된 작업이 없습니다.")
+
+            # 1. Remotion 타임라인 렌더링 작업
+            if "remotion_render" in tasks:
+                raw_tl = form.get("timeline_data")
+                if not raw_tl:
+                    raise ValueError("타임라인 데이터가 비어 있습니다.")
+                timeline = json.loads(raw_tl) if isinstance(raw_tl, str) else raw_tl
+
+                # 비주얼 파일들 디스크에 저장
+                for idx, v in enumerate(timeline.get("visual_track", [])):
+                    field_name = v.get("file_field") or f"visual_file_{idx}"
+                    file_obj = form.get(field_name)
+                    if isinstance(file_obj, dict) and file_obj.get("data"):
+                        ext = os.path.splitext(file_obj.get("filename") or "")[1].lower() or ".jpg"
+                        saved_path = os.path.join(UPLOAD_DIR, f"{job_id}_v_{idx}{ext}")
+                        with open(saved_path, "wb") as f:
+                            f.write(file_obj["data"])
+                        v["media_path"] = saved_path
+
+                # 오디오 파일들 디스크에 저장
+                for idx, a in enumerate(timeline.get("audio_track", [])):
+                    field_name = a.get("file_field") or f"audio_file_{idx}"
+                    file_obj = form.get(field_name)
+                    if isinstance(file_obj, dict) and file_obj.get("data"):
+                        ext = os.path.splitext(file_obj.get("filename") or "")[1].lower() or ".mp3"
+                        saved_path = os.path.join(UPLOAD_DIR, f"{job_id}_a_{idx}{ext}")
+                        with open(saved_path, "wb") as f:
+                            f.write(file_obj["data"])
+                        a["media_path"] = saved_path
+
+                out = _out_path("remotion", job_id)
+                job["current_task"] = "Remotion 멀티트랙 비디오 렌더링 중"
+                _append_log(job, "▶ [Remotion Studio] 이미지/오디오/자막 3개 트랙 컴파일 및 렌더링 시작...")
+
+                def remotion_cb(pct, line):
+                    if line:
+                        _append_log(job, line)
+                    if pct is not None:
+                        job["progress"] = min(99, max(job["progress"], int(pct)))
+
+                render_timeline(
+                    timeline=timeline,
+                    output_path=out,
+                    progress_callback=remotion_cb,
+                    cancel_event=cancel_event,
+                    return_log=False
+                )
+
+                if cancel_event.is_set():
+                    job["status"] = "cancelled"
+                    return
+
+                job["results"].append({
+                    "task": "Remotion 멀티트랙 비디오 (Images·Audio·Subtitles)",
+                    "url": f"/download/{os.path.basename(out)}"
+                })
+                job["status"] = "done"
+                job["progress"] = 100
+                _append_log(job, "✨ === Remotion 비디오 렌더링 완료 ===")
+                return
+
+            # 2. 오디오 필수 기반의 기존 작업들 (scene_subtitles, waveform, waveform_overlay, static)
             audio = form.get("audio")
             if not isinstance(audio, dict) or not audio.get("data"):
                 raise ValueError("오디오 파일이 비어 있습니다.")
@@ -117,10 +183,6 @@ def _run_job(job_id):
             audio_path = os.path.join(UPLOAD_DIR, f"{job_id}{ext}")
             with open(audio_path, "wb") as f:
                 f.write(audio["data"])
-
-            tasks = [t.strip() for t in str(form.get("tasks") or "").split(",") if t.strip() in TASKS]
-            if not tasks:
-                raise ValueError("선택된 작업이 없습니다.")
 
             # 단일 이미지 파싱
             image_path = None
@@ -168,7 +230,6 @@ def _run_job(job_id):
 
                 try:
                     if task == "scene_subtitles":
-                        # 다중 씬 & 자막 렌더링
                         raw_meta = form.get("scenes_meta") or "[]"
                         scenes_meta = json.loads(raw_meta) if isinstance(raw_meta, str) else raw_meta
                         if not scenes_meta:
@@ -327,7 +388,7 @@ def parse_multipart(body, content_type):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WaveStudioPro/2.1"
+    server_version = "WaveStudioPro/3.0"
 
     def log_message(self, fmt, *args):
         sys.stderr.write("[webui] %s - %s\n" % (self.address_string(), fmt % args))
@@ -485,10 +546,6 @@ class Handler(BaseHTTPRequestHandler):
                 form = parse_multipart(body, self.headers.get("Content-Type", ""))
             except ValueError as e:
                 self._send_json(400, {"error": str(e)})
-                return
-
-            if "audio" not in form:
-                self._send_json(400, {"error": "오디오 파일이 필요합니다."})
                 return
 
             job_id = uuid.uuid4().hex[:12]
