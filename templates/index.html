@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WaveStudio Pro | 오디오 & 이미지 비디오 생성 스튜디오</title>
-  <meta name="description" content="오디오와 이미지 파일을 합성하여 고화질 1080p 파형 시각화 및 정지영상 MP4 비디오를 실시간으로 제작하는 풀스택 웹 스튜디오입니다.">
+  <title>WaveStudio Pro | 씬별 나레이션 자막 & 오디오 비디오 생성기</title>
+  <meta name="description" content="나레이션 대본 텍스트를 업로드하여 이미지 및 동영상 씬에 맞추어 자막을 자동 배분하고 고화질 1080p 비디오를 렌더링하는 풀스택 웹 스튜디오입니다.">
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -18,8 +18,8 @@
           </svg>
         </div>
         <div class="brand-info">
-          <h1>WaveStudio <span class="brand-badge">Fullstack Pro</span></h1>
-          <p>오디오와 이미지를 결합하여 1080p 고화질 MP4 비디오를 렌더링합니다.</p>
+          <h1>WaveStudio <span class="brand-badge">Scene & Narration Pro</span></h1>
+          <p>나레이션 대본과 다중 이미지/동영상을 결합하여 1080p 자막 비디오를 제작합니다.</p>
         </div>
       </div>
       <div class="header-meta">
@@ -30,248 +30,444 @@
       </div>
     </header>
 
-    <!-- Studio Layout -->
+    <!-- Top Mode Switch Tabs -->
+    <div class="studio-tabs">
+      <button type="button" class="studio-tab-btn active" id="tabSceneStudio" data-tab="scene">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/>
+        </svg>
+        <span>🎬 씬 & 나레이션 자막 스튜디오 (Multi-Scene Subtitles)</span>
+      </button>
+      <button type="button" class="studio-tab-btn" id="tabClassicStudio" data-tab="classic">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M3 17h2v-4H3v4zm4 4h2V7H7v14zm4-8h2V3h-2v10zm4 4h2V9h-2v8zm4-2h2v-4h-2v4z"/>
+        </svg>
+        <span>⚡ 클래식 비디오 모드 (Waveform & Overlay)</span>
+      </button>
+    </div>
+
+    <!-- Main Studio Grid -->
     <main class="studio-grid">
-      <!-- Left Column: Controls & Inputs -->
+      <!-- Left Column: Controls & Storyboard -->
       <section class="controls-column">
-        <!-- Step 1: Media Files Upload -->
-        <div class="panel">
-          <div class="panel-header">
-            <div class="panel-title">
-              <span class="step-number">1</span>
-              <span>소스 미디어 파일</span>
-            </div>
-            <span class="panel-hint">드래그 앤 드롭 지원</span>
-          </div>
 
-          <div class="upload-group">
-            <!-- Audio Dropzone -->
-            <div class="drop-column">
-              <div class="dropzone" id="audioDrop">
-                <div class="dropzone-icon">
-                  <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-                  </svg>
-                </div>
-                <div class="dropzone-label">오디오 파일 <span class="dropzone-req req-badge">필수</span></div>
-                <div class="dropzone-sub">MP3, WAV, M4A, FLAC 등</div>
+        <!-- ===================================================
+             MODE 1: Multi-Scene & Narration Subtitles Studio
+             =================================================== -->
+        <div id="sceneStudioView">
+          <!-- Step 1: Narration Audio -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <span class="step-number">1</span>
+                <span>나레이션 오디오 파일</span>
               </div>
-              <input type="file" id="audioInput" class="file-input-hidden" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac">
+              <span class="panel-hint">메인 음성 트랙</span>
+            </div>
 
-              <!-- Audio Loaded Card -->
-              <div class="file-loaded-card" id="audioLoadedCard">
-                <div class="file-info-row">
-                  <div class="file-meta">
-                    <div class="file-type-icon">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-                      </svg>
-                    </div>
-                    <div class="file-details">
-                      <div class="file-name" id="audioFileName">-</div>
-                      <div class="file-size-tag" id="audioFileSize">-</div>
-                    </div>
+            <div class="dropzone" id="sceneAudioDrop">
+              <div class="dropzone-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                </svg>
+              </div>
+              <div class="dropzone-label">나레이션 오디오 파일 선택 또는 드래그 <span class="dropzone-req req-badge">필수</span></div>
+              <div class="dropzone-sub">MP3, WAV, M4A, FLAC 등</div>
+            </div>
+            <input type="file" id="sceneAudioInput" class="file-input-hidden" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac">
+
+            <!-- Audio Loaded Card -->
+            <div class="file-loaded-card" id="sceneAudioLoadedCard">
+              <div class="file-info-row">
+                <div class="file-meta">
+                  <div class="file-type-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                    </svg>
                   </div>
-                  <button type="button" class="btn-remove-file" id="btnRemoveAudio" title="오디오 제거">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                  <div class="file-details">
+                    <div class="file-name" id="sceneAudioFileName">-</div>
+                    <div class="file-size-tag" id="sceneAudioFileSize">-</div>
+                  </div>
+                </div>
+                <button type="button" class="btn-remove-file" id="btnRemoveSceneAudio" title="오디오 제거">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                  </svg>
+                </button>
+              </div>
+              <!-- Audio Wave Preview -->
+              <div class="audio-preview-box">
+                <div class="audio-controls-row">
+                  <button type="button" class="btn-play-pause" id="btnPlaySceneAudio" title="오디오 재생/정지">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M8 5v14l11-7z"/>
                     </svg>
                   </button>
+                  <span class="audio-time-label" id="sceneAudioTimeLabel">0:00 / 0:00</span>
                 </div>
-                <!-- Audio Wave Preview & Mini Player -->
-                <div class="audio-preview-box">
-                  <div class="audio-controls-row">
-                    <button type="button" class="btn-play-pause" id="btnPlayAudio" title="오디오 재생/정지">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M8 5v14l11-7z"/>
+                <canvas id="sceneAudioWaveCanvas" class="waveform-canvas"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 2: Narration Script Upload & Auto Distribution -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <span class="step-number">2</span>
+                <span>나레이션 대본(Text) 업로드 & 입력</span>
+              </div>
+              <span class="panel-hint">대본 자동 분석</span>
+            </div>
+
+            <div class="narration-box">
+              <div class="script-header-actions">
+                <label for="narrationFileInput" class="btn-upload-text">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+                  </svg>
+                  <span>대본 파일(.txt, .srt) 업로드</span>
+                </label>
+                <input type="file" id="narrationFileInput" class="file-input-hidden" accept=".txt,.srt,text/plain">
+                <span class="script-meta-tag" id="scriptSentenceCount">0개 문장 감지됨</span>
+              </div>
+
+              <textarea id="narrationText" class="narration-textarea" placeholder="여기에 전체 나레이션 대본을 입력하거나 붙여넣으세요. 마침표(.)나 줄바꿈을 기준으로 각 씬에 자막이 균등하게 자동 배분됩니다."></textarea>
+
+              <div class="script-button-row">
+                <button type="button" class="btn-magic-distribute" id="btnDistributeSubs">
+                  <span>🪄 문장 자동 분할 및 씬 배분</span>
+                </button>
+                <button type="button" class="btn-auto-balance" id="btnAutoBalanceDuration">
+                  <span>⏱️ 오디오 길이에 맞춰 씬 시간 균등 배분</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 3: Multi-Scene Storyboard Editor -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <span class="step-number">3</span>
+                <span>씬(Scene) 타임라인 스토리보드 & 자막 편집</span>
+              </div>
+              <span class="panel-hint" id="scenesTotalInfo">0개 씬 등록됨</span>
+            </div>
+
+            <!-- Multi-Media Dropzone -->
+            <div class="dropzone" id="multiSceneDrop">
+              <div class="dropzone-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/>
+                </svg>
+              </div>
+              <div class="dropzone-label">이미지 또는 동영상 파일 여러 개를 드래그하여 씬 추가</div>
+              <div class="dropzone-sub">JPG, PNG, WebP, MP4, MOV 등 (다중 선택 가능)</div>
+            </div>
+            <input type="file" id="multiSceneInput" class="file-input-hidden" multiple accept="image/*,video/*,.jpg,.jpeg,.png,.webp,.mp4,.mov,.webm">
+
+            <!-- Scenes List Container -->
+            <div class="scenes-container" id="scenesContainer"></div>
+
+            <div class="btn-add-scene-drop" id="btnAddScene">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+              </svg>
+              <span>미디어 파일 추가하여 새 씬 생성</span>
+            </div>
+          </div>
+
+          <!-- Step 4: Subtitle Style Customizer -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <span class="step-number">4</span>
+                <span>자막 스타일 커스텀</span>
+              </div>
+              <span class="panel-hint">실시간 캔버스에 즉시 반영</span>
+            </div>
+
+            <div class="customizer-section">
+              <div class="form-row">
+                <div class="form-group">
+                  <div class="form-label-row">
+                    <span class="form-label">자막 글꼴 크기</span>
+                    <span class="val-badge" id="subFontSizeVal">30px</span>
+                  </div>
+                  <input type="range" id="subFontSize" min="20" max="50" step="2" value="30">
+                </div>
+
+                <div class="form-group">
+                  <div class="form-label-row">
+                    <span class="form-label">자막 글자 색상</span>
+                  </div>
+                  <div class="color-input-wrapper">
+                    <input type="color" id="subFontColorInput" value="#ffffff">
+                    <input type="text" id="subFontColorHex" class="color-hex-input" value="#ffffff" maxlength="7">
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <div class="form-label-row">
+                    <span class="form-label">자막 배경 스타일</span>
+                  </div>
+                  <div class="segmented-control">
+                    <button type="button" class="segment-btn active" data-subbg="box" id="subBgBox">반투명 박스</button>
+                    <button type="button" class="segment-btn" data-subbg="shadow" id="subBgShadow">외곽선 그림자</button>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <div class="form-label-row">
+                    <span class="form-label">자막 세로 위치</span>
+                  </div>
+                  <div class="segmented-control">
+                    <button type="button" class="segment-btn" data-subpos="top" id="subPosTop">상단</button>
+                    <button type="button" class="segment-btn" data-subpos="center" id="subPosCenter">중앙</button>
+                    <button type="button" class="segment-btn active" data-subpos="bottom" id="subPosBottom">하단</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===================================================
+             MODE 2: Classic Video Studio (Original)
+             =================================================== -->
+        <div id="classicStudioView" style="display: none;">
+          <!-- Classic Step 1: Media Files Upload -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <span class="step-number">1</span>
+                <span>소스 미디어 파일</span>
+              </div>
+              <span class="panel-hint">단일 이미지 & 오디오</span>
+            </div>
+
+            <div class="upload-group">
+              <!-- Audio Dropzone -->
+              <div class="drop-column">
+                <div class="dropzone" id="audioDrop">
+                  <div class="dropzone-icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                    </svg>
+                  </div>
+                  <div class="dropzone-label">오디오 파일 <span class="dropzone-req req-badge">필수</span></div>
+                  <div class="dropzone-sub">MP3, WAV, M4A, FLAC 등</div>
+                </div>
+                <input type="file" id="audioInput" class="file-input-hidden" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac">
+
+                <div class="file-loaded-card" id="audioLoadedCard">
+                  <div class="file-info-row">
+                    <div class="file-meta">
+                      <div class="file-type-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                        </svg>
+                      </div>
+                      <div class="file-details">
+                        <div class="file-name" id="audioFileName">-</div>
+                        <div class="file-size-tag" id="audioFileSize">-</div>
+                      </div>
+                    </div>
+                    <button type="button" class="btn-remove-file" id="btnRemoveAudio" title="오디오 제거">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
                       </svg>
                     </button>
-                    <span class="audio-time-label" id="audioTimeLabel">0:00 / 0:00</span>
                   </div>
-                  <canvas id="audioWaveCanvas" class="waveform-canvas"></canvas>
+                  <div class="audio-preview-box">
+                    <div class="audio-controls-row">
+                      <button type="button" class="btn-play-pause" id="btnPlayAudio" title="오디오 재생/정지">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M8 5v14l11-7z"/>
+                        </svg>
+                      </button>
+                      <span class="audio-time-label" id="audioTimeLabel">0:00 / 0:00</span>
+                    </div>
+                    <canvas id="audioWaveCanvas" class="waveform-canvas"></canvas>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <!-- Image Dropzone -->
-            <div class="drop-column">
-              <div class="dropzone" id="imageDrop">
-                <div class="dropzone-icon">
-                  <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-                  </svg>
-                </div>
-                <div class="dropzone-label">배경 이미지 <span class="dropzone-req opt-badge">선택</span></div>
-                <div class="dropzone-sub">JPG, PNG, WebP (1080p 권장)</div>
-              </div>
-              <input type="file" id="imageInput" class="file-input-hidden" accept="image/*,.jpg,.jpeg,.png,.webp">
-
-              <!-- Image Loaded Card -->
-              <div class="file-loaded-card" id="imageLoadedCard">
-                <div class="file-info-row">
-                  <div class="file-meta">
-                    <div class="file-type-icon">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-                      </svg>
-                    </div>
-                    <div class="file-details">
-                      <div class="file-name" id="imageFileName">-</div>
-                      <div class="file-size-tag" id="imageFileSize">-</div>
-                    </div>
-                  </div>
-                  <button type="button" class="btn-remove-file" id="btnRemoveImage" title="이미지 제거">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+              <!-- Image Dropzone -->
+              <div class="drop-column">
+                <div class="dropzone" id="imageDrop">
+                  <div class="dropzone-icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
                     </svg>
-                  </button>
+                  </div>
+                  <div class="dropzone-label">배경 이미지 <span class="dropzone-req opt-badge">선택</span></div>
+                  <div class="dropzone-sub">JPG, PNG, WebP (1080p 권장)</div>
                 </div>
-                <img id="imageThumb" class="image-thumb-preview" alt="배경 미리보기">
+                <input type="file" id="imageInput" class="file-input-hidden" accept="image/*,.jpg,.jpeg,.png,.webp">
+
+                <div class="file-loaded-card" id="imageLoadedCard">
+                  <div class="file-info-row">
+                    <div class="file-meta">
+                      <div class="file-type-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                        </svg>
+                      </div>
+                      <div class="file-details">
+                        <div class="file-name" id="imageFileName">-</div>
+                        <div class="file-size-tag" id="imageFileSize">-</div>
+                      </div>
+                    </div>
+                    <button type="button" class="btn-remove-file" id="btnRemoveImage" title="이미지 제거">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <img id="imageThumb" class="image-thumb-preview" alt="배경 미리보기">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Classic Step 2: Render Mode Selector -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <span class="step-number">2</span>
+                <span>비디오 렌더 모드</span>
+              </div>
+            </div>
+
+            <div class="mode-cards">
+              <div class="mode-card active" data-mode="waveform_overlay">
+                <div class="mode-card-header">
+                  <div class="mode-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M3 17h2v-4H3v4zm4 4h2V7H7v14zm4-8h2V3h-2v10zm4 4h2V9h-2v8zm4-2h2v-4h-2v4z"/>
+                    </svg>
+                  </div>
+                  <div class="mode-radio-check"></div>
+                </div>
+                <div class="mode-title">웨이브 오버레이</div>
+                <div class="mode-desc">배경 이미지 위에 반투명 오디오 파형을 세련되게 합성합니다.</div>
+              </div>
+
+              <div class="mode-card" data-mode="waveform">
+                <div class="mode-card-header">
+                  <div class="mode-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 3v9.28c-.47-.17-.97-.28-1.5-.28C8.01 12 6 14.01 6 16.5S8.01 21 10.5 21c2.31 0 4.2-1.75 4.45-4H15V6h4V3h-7z"/>
+                    </svg>
+                  </div>
+                  <div class="mode-radio-check"></div>
+                </div>
+                <div class="mode-title">파형 비디오</div>
+                <div class="mode-desc">오디오 신호만으로 깔끔한 단독 파형 시각화 비디오를 생성합니다.</div>
+              </div>
+
+              <div class="mode-card" data-mode="static">
+                <div class="mode-card-header">
+                  <div class="mode-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/>
+                    </svg>
+                  </div>
+                  <div class="mode-radio-check"></div>
+                </div>
+                <div class="mode-title">정지 이미지 영상</div>
+                <div class="mode-desc">정적 배경 이미지와 오디오를 최적화 인코딩하여 결합합니다.</div>
+              </div>
+            </div>
+
+            <div class="batch-all-toggle">
+              <label for="batchAllToggle">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M7 2v11h3v9l7-12h-4l4-8z"/>
+                </svg>
+                <span>3가지 비디오 모드 한 번에 일괄 생성 (All-in-One)</span>
+              </label>
+              <div class="toggle-switch">
+                <input type="checkbox" id="batchAllToggle">
+                <span class="slider-toggle"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Classic Step 3: Waveform Visual Customizer -->
+          <div class="panel" id="optionsPanel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <span class="step-number">3</span>
+                <span>파형 스타일 커스텀</span>
+              </div>
+            </div>
+
+            <div class="customizer-section">
+              <div>
+                <div class="form-label" style="margin-bottom:8px">네온 스타일 프리셋</div>
+                <div class="preset-palette-group" id="presetsContainer"></div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <div class="form-label-row">
+                    <span class="form-label">파형 색상</span>
+                  </div>
+                  <div class="color-input-wrapper">
+                    <input type="color" id="waveColorInput" value="#00d2ff">
+                    <input type="text" id="waveColorHex" class="color-hex-input" value="#00d2ff" maxlength="7">
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <div class="form-label-row">
+                    <span class="form-label">파형 투명도 (Opacity)</span>
+                    <span class="val-badge" id="opacityVal">70%</span>
+                  </div>
+                  <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.05" value="0.7">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <div class="form-label-row">
+                    <span class="form-label">파형 높이</span>
+                    <span class="val-badge" id="heightVal">320px</span>
+                  </div>
+                  <input type="range" id="heightSlider" min="100" max="800" step="10" value="320">
+                </div>
+
+                <div class="form-group">
+                  <div class="form-label-row">
+                    <span class="form-label">파형 세로 위치</span>
+                  </div>
+                  <div class="segmented-control">
+                    <button type="button" class="segment-btn" data-pos="top">상단</button>
+                    <button type="button" class="segment-btn" data-pos="center">중앙</button>
+                    <button type="button" class="segment-btn active" data-pos="bottom">하단</button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Step 2: Render Mode Selector -->
-        <div class="panel">
-          <div class="panel-header">
-            <div class="panel-title">
-              <span class="step-number">2</span>
-              <span>비디오 렌더 모드</span>
-            </div>
-          </div>
-
-          <div class="mode-cards">
-            <!-- Mode: Waveform Overlay -->
-            <div class="mode-card active" data-mode="waveform_overlay">
-              <div class="mode-card-header">
-                <div class="mode-icon">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M3 17h2v-4H3v4zm4 4h2V7H7v14zm4-8h2V3h-2v10zm4 4h2V9h-2v8zm4-2h2v-4h-2v4z"/>
-                  </svg>
-                </div>
-                <div class="mode-radio-check"></div>
-              </div>
-              <div class="mode-title">웨이브 오버레이</div>
-              <div class="mode-desc">배경 이미지 위에 반투명 오디오 파형을 세련되게 합성합니다.</div>
-            </div>
-
-            <!-- Mode: Waveform Only -->
-            <div class="mode-card" data-mode="waveform">
-              <div class="mode-card-header">
-                <div class="mode-icon">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 3v9.28c-.47-.17-.97-.28-1.5-.28C8.01 12 6 14.01 6 16.5S8.01 21 10.5 21c2.31 0 4.2-1.75 4.45-4H15V6h4V3h-7z"/>
-                  </svg>
-                </div>
-                <div class="mode-radio-check"></div>
-              </div>
-              <div class="mode-title">파형 비디오</div>
-              <div class="mode-desc">오디오 신호만으로 깔끔한 단독 파형 시각화 비디오를 생성합니다.</div>
-            </div>
-
-            <!-- Mode: Static Video -->
-            <div class="mode-card" data-mode="static">
-              <div class="mode-card-header">
-                <div class="mode-icon">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/>
-                  </svg>
-                </div>
-                <div class="mode-radio-check"></div>
-              </div>
-              <div class="mode-title">정지 이미지 영상</div>
-              <div class="mode-desc">정적 배경 이미지와 오디오를 최적화 인코딩하여 결합합니다.</div>
-            </div>
-          </div>
-
-          <!-- All in one batch toggle -->
-          <div class="batch-all-toggle">
-            <label for="batchAllToggle">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M7 2v11h3v9l7-12h-4l4-8z"/>
-              </svg>
-              <span>3가지 비디오 모드 한 번에 일괄 생성 (All-in-One)</span>
-            </label>
-            <div class="toggle-switch">
-              <input type="checkbox" id="batchAllToggle">
-              <span class="slider-toggle"></span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Step 3: Waveform Visual Customizer -->
-        <div class="panel" id="optionsPanel">
-          <div class="panel-header">
-            <div class="panel-title">
-              <span class="step-number">3</span>
-              <span>파형 스타일 커스텀</span>
-            </div>
-            <span class="panel-hint">실시간 미리보기에 즉시 반영</span>
-          </div>
-
-          <div class="customizer-section">
-            <!-- Preset Palette -->
-            <div>
-              <div class="form-label" style="margin-bottom:8px">네온 스타일 프리셋</div>
-              <div class="preset-palette-group" id="presetsContainer"></div>
-            </div>
-
-            <!-- Form Row 1: Color & Opacity -->
-            <div class="form-row">
-              <div class="form-group">
-                <div class="form-label-row">
-                  <span class="form-label">파형 색상</span>
-                </div>
-                <div class="color-input-wrapper">
-                  <input type="color" id="waveColorInput" value="#00d2ff">
-                  <input type="text" id="waveColorHex" class="color-hex-input" value="#00d2ff" maxlength="7">
-                </div>
-              </div>
-
-              <div class="form-group">
-                <div class="form-label-row">
-                  <span class="form-label">파형 투명도 (Opacity)</span>
-                  <span class="val-badge" id="opacityVal">70%</span>
-                </div>
-                <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.05" value="0.7">
-              </div>
-            </div>
-
-            <!-- Form Row 2: Height & Position -->
-            <div class="form-row">
-              <div class="form-group">
-                <div class="form-label-row">
-                  <span class="form-label">파형 높이</span>
-                  <span class="val-badge" id="heightVal">320px</span>
-                </div>
-                <input type="range" id="heightSlider" min="100" max="800" step="10" value="320">
-              </div>
-
-              <div class="form-group">
-                <div class="form-label-row">
-                  <span class="form-label">파형 세로 위치</span>
-                </div>
-                <div class="segmented-control">
-                  <button type="button" class="segment-btn" data-pos="top">상단 (Top)</button>
-                  <button type="button" class="segment-btn" data-pos="center">중앙 (Center)</button>
-                  <button type="button" class="segment-btn active" data-pos="bottom">하단 (Bottom)</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Render Launch Button -->
+        <!-- Common Render Launch Button -->
         <button type="button" class="btn-generate" id="btnGenerate" disabled>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M8 5v14l11-7z"/>
           </svg>
-          <span>오디오 파일을 업로드하세요</span>
+          <span id="btnGenerateText">오디오 파일을 업로드하세요</span>
         </button>
       </section>
 
-      <!-- Right Column: Live Mockup, Monitor & Library -->
+      <!-- Right Column: Live 1080p Mockup, Monitor & Library -->
       <section class="preview-column">
         <!-- Live Layout Mockup -->
         <div class="panel">
@@ -280,18 +476,19 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="color:var(--accent-cyan)">
                 <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
               </svg>
-              <span>1080p 레이아웃 실시간 프리뷰</span>
+              <span>1080p 레이아웃 & 자막 실시간 프리뷰</span>
             </div>
-            <span class="panel-hint">16:9 비율 유지</span>
+            <span class="panel-hint">16:9 비율</span>
           </div>
 
           <div class="preview-card">
-            <div class="preview-overlay-badge">LIVE 1920 × 1080 MOCKUP</div>
+            <div class="preview-overlay-badge" id="previewModeBadge">SCENE 1 PREVIEW</div>
+            <div class="preview-scene-indicator" id="previewSceneIndicator">씬 1/1</div>
             <canvas id="previewCanvas"></canvas>
           </div>
         </div>
 
-        <!-- Render Monitor Panel (Visible when running) -->
+        <!-- Render Monitor Panel -->
         <div class="panel monitor-panel" id="monitorPanel">
           <div class="progress-header">
             <div class="stage-badge" id="stageBadge">
@@ -307,7 +504,7 @@
 
           <div class="progress-steps-row">
             <div class="step-pill" id="stepUpload">1. 업로드</div>
-            <div class="step-pill" id="stepAnalyze">2. 신호 분석</div>
+            <div class="step-pill" id="stepAnalyze">2. 신호/자막 분석</div>
             <div class="step-pill" id="stepEncode">3. FFmpeg 인코딩</div>
             <div class="step-pill" id="stepComplete">4. 완료</div>
           </div>

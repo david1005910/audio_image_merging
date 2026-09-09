@@ -1,6 +1,6 @@
 /**
  * app.js
- * WaveStudio Fullstack UI logic, API interaction & Real-time Live Preview
+ * WaveStudio Pro - Multi-Scene Narration Subtitles & Classic Video Studio
  */
 
 (function () {
@@ -8,21 +8,36 @@
 
   // Global State
   const state = {
-    audioFile: null,
-    imageFile: null,
-    imageBitmap: null,
-    selectedMode: 'waveform_overlay', // 'waveform' | 'waveform_overlay' | 'static'
+    currentTab: 'scene', // 'scene' | 'classic'
+
+    // Scene Studio State
+    sceneAudioFile: null,
+    sceneAudioDuration: 0,
+    scenes: [], // [{ id, file, url, type, isVideo, duration, subtitle, imgBitmap }]
+    activeSceneIndex: 0,
+    subFontSize: 30,
+    subFontColor: '#ffffff',
+    subBgStyle: 'box', // 'box' | 'shadow'
+    subPosition: 'bottom', // 'bottom' | 'center' | 'top'
+
+    // Classic Studio State
+    classicAudioFile: null,
+    classicImageFile: null,
+    classicImageBitmap: null,
+    selectedMode: 'waveform_overlay',
     batchAll: false,
     waveColor: '#00d2ff',
     opacity: 0.7,
     waveHeight: 320,
-    position: 'bottom', // 'top' | 'center' | 'bottom'
+    classicPosition: 'bottom',
+
+    // Shared State
     activeJobId: null,
     pollTimer: null,
-    audioPreviewer: null
+    sceneAudioPreviewer: null,
+    classicAudioPreviewer: null
   };
 
-  // Color Presets
   const PRESETS = [
     { name: 'Cyber Cyan', color: '#00d2ff' },
     { name: 'Neon Sunset', color: '#f97316' },
@@ -32,43 +47,73 @@
     { name: 'Hot Pink', color: '#ff0080' }
   ];
 
-  // DOM Elements
   const el = {};
 
   document.addEventListener('DOMContentLoaded', () => {
     initDOMElements();
-    initAudioPreviewer();
-    initPresets();
-    initDropzones();
-    initModeCards();
-    initCustomizerInputs();
-    initPreviewCanvas();
-    initLogToggle();
-    initModal();
-    initRunAction();
+    initTabSwitching();
+    initSceneStudio();
+    initClassicStudio();
+    initCommonFeatures();
     fetchLibraryFiles();
   });
 
   function initDOMElements() {
-    el.audioDrop = document.getElementById('audioDrop');
-    el.audioInput = document.getElementById('audioInput');
-    el.audioLoadedCard = document.getElementById('audioLoadedCard');
-    el.audioFileName = document.getElementById('audioFileName');
-    el.audioFileSize = document.getElementById('audioFileSize');
-    el.btnRemoveAudio = document.getElementById('btnRemoveAudio');
+    // Tabs
+    el.tabScene = document.getElementById('tabSceneStudio');
+    el.tabClassic = document.getElementById('tabClassicStudio');
+    el.viewScene = document.getElementById('sceneStudioView');
+    el.viewClassic = document.getElementById('classicStudioView');
 
-    el.imageDrop = document.getElementById('imageDrop');
-    el.imageInput = document.getElementById('imageInput');
-    el.imageLoadedCard = document.getElementById('imageLoadedCard');
-    el.imageFileName = document.getElementById('imageFileName');
-    el.imageFileSize = document.getElementById('imageFileSize');
-    el.btnRemoveImage = document.getElementById('btnRemoveImage');
-    el.imageThumb = document.getElementById('imageThumb');
+    // Scene Studio
+    el.sceneAudioDrop = document.getElementById('sceneAudioDrop');
+    el.sceneAudioInput = document.getElementById('sceneAudioInput');
+    el.sceneAudioLoadedCard = document.getElementById('sceneAudioLoadedCard');
+    el.sceneAudioFileName = document.getElementById('sceneAudioFileName');
+    el.sceneAudioFileSize = document.getElementById('sceneAudioFileSize');
+    el.btnRemoveSceneAudio = document.getElementById('btnRemoveSceneAudio');
 
-    el.modeCards = document.querySelectorAll('.mode-card');
+    el.narrationFileInput = document.getElementById('narrationFileInput');
+    el.narrationText = document.getElementById('narrationText');
+    el.scriptSentenceCount = document.getElementById('scriptSentenceCount');
+    el.btnDistributeSubs = document.getElementById('btnDistributeSubs');
+    el.btnAutoBalanceDuration = document.getElementById('btnAutoBalanceDuration');
+
+    el.multiSceneDrop = document.getElementById('multiSceneDrop');
+    el.multiSceneInput = document.getElementById('multiSceneInput');
+    el.scenesContainer = document.getElementById('scenesContainer');
+    el.btnAddScene = document.getElementById('btnAddScene');
+    el.scenesTotalInfo = document.getElementById('scenesTotalInfo');
+
+    el.subFontSize = document.getElementById('subFontSize');
+    el.subFontSizeVal = document.getElementById('subFontSizeVal');
+    el.subFontColorInput = document.getElementById('subFontColorInput');
+    el.subFontColorHex = document.getElementById('subFontColorHex');
+    el.subBgBox = document.getElementById('subBgBox');
+    el.subBgShadow = document.getElementById('subBgShadow');
+    el.subPosTop = document.getElementById('subPosTop');
+    el.subPosCenter = document.getElementById('subPosCenter');
+    el.subPosBottom = document.getElementById('subPosBottom');
+
+    // Classic Studio
+    el.classicAudioDrop = document.getElementById('audioDrop');
+    el.classicAudioInput = document.getElementById('audioInput');
+    el.classicAudioLoadedCard = document.getElementById('audioLoadedCard');
+    el.classicAudioFileName = document.getElementById('audioFileName');
+    el.classicAudioFileSize = document.getElementById('audioFileSize');
+    el.btnRemoveClassicAudio = document.getElementById('btnRemoveAudio');
+
+    el.classicImageDrop = document.getElementById('imageDrop');
+    el.classicImageInput = document.getElementById('imageInput');
+    el.classicImageLoadedCard = document.getElementById('imageLoadedCard');
+    el.classicImageFileName = document.getElementById('imageFileName');
+    el.classicImageFileSize = document.getElementById('imageFileSize');
+    el.btnRemoveClassicImage = document.getElementById('btnRemoveImage');
+    el.classicImageThumb = document.getElementById('imageThumb');
+
+    el.classicModeCards = document.querySelectorAll('.mode-card');
     el.batchToggle = document.getElementById('batchAllToggle');
-    el.optionsPanel = document.getElementById('optionsPanel');
-
+    el.classicOptionsPanel = document.getElementById('optionsPanel');
     el.presetsContainer = document.getElementById('presetsContainer');
     el.waveColorInput = document.getElementById('waveColorInput');
     el.waveColorHex = document.getElementById('waveColorHex');
@@ -76,10 +121,14 @@
     el.opacityVal = document.getElementById('opacityVal');
     el.heightSlider = document.getElementById('heightSlider');
     el.heightVal = document.getElementById('heightVal');
-    el.posButtons = document.querySelectorAll('.segment-btn');
+    el.classicPosButtons = document.querySelectorAll('#optionsPanel .segment-btn');
 
-    el.previewCanvas = document.getElementById('previewCanvas');
+    // Common Elements
     el.btnGenerate = document.getElementById('btnGenerate');
+    el.btnGenerateText = document.getElementById('btnGenerateText');
+    el.previewCanvas = document.getElementById('previewCanvas');
+    el.previewModeBadge = document.getElementById('previewModeBadge');
+    el.previewSceneIndicator = document.getElementById('previewSceneIndicator');
 
     el.monitorPanel = document.getElementById('monitorPanel');
     el.stageBadge = document.getElementById('stageBadge');
@@ -101,77 +150,455 @@
     el.btnCloseModal = document.getElementById('btnCloseModal');
   }
 
-  function initAudioPreviewer() {
-    state.audioPreviewer = new AudioWavePreviewer('audioWaveCanvas', 'btnPlayAudio', 'audioTimeLabel');
+  // ==========================================
+  // Tab Switching
+  // ==========================================
+  function initTabSwitching() {
+    el.tabScene.addEventListener('click', () => setTab('scene'));
+    el.tabClassic.addEventListener('click', () => setTab('classic'));
   }
 
-  function initPresets() {
-    if (!el.presetsContainer) return;
-    el.presetsContainer.innerHTML = '';
-    PRESETS.forEach(p => {
-      const chip = document.createElement('div');
-      chip.className = `preset-chip ${p.color.toLowerCase() === state.waveColor.toLowerCase() ? 'active' : ''}`;
-      chip.dataset.color = p.color;
-      chip.innerHTML = `<span class="preset-dot" style="background:${p.color}"></span>${p.name}`;
-      chip.addEventListener('click', () => {
-        applyColor(p.color);
-        document.querySelectorAll('.preset-chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-      });
-      el.presetsContainer.appendChild(chip);
-    });
-  }
-
-  function applyColor(hex) {
-    state.waveColor = hex;
-    el.waveColorInput.value = hex;
-    el.waveColorHex.value = hex;
+  function setTab(tab) {
+    state.currentTab = tab;
+    if (tab === 'scene') {
+      el.tabScene.classList.add('active');
+      el.tabClassic.classList.remove('active');
+      el.viewScene.style.display = 'block';
+      el.viewClassic.style.display = 'none';
+      el.previewModeBadge.textContent = 'SCENE PREVIEW';
+      el.previewSceneIndicator.style.display = 'block';
+    } else {
+      el.tabClassic.classList.add('active');
+      el.tabScene.classList.remove('active');
+      el.viewClassic.style.display = 'block';
+      el.viewScene.style.display = 'none';
+      el.previewModeBadge.textContent = 'CLASSIC PREVIEW';
+      el.previewSceneIndicator.style.display = 'none';
+    }
+    updateGenerateButtonState();
     renderLivePreview();
   }
 
-  function initDropzones() {
-    // Audio Dropzone
-    setupDropzone(el.audioDrop, el.audioInput, (file) => {
-      if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|wav|m4a|ogg|flac|aac)$/i)) {
+  // ==========================================
+  // Scene Studio Implementation
+  // ==========================================
+  function initSceneStudio() {
+    state.sceneAudioPreviewer = new AudioWavePreviewer('sceneAudioWaveCanvas', 'btnPlaySceneAudio', 'sceneAudioTimeLabel');
+
+    // Scene Audio Dropzone
+    setupDropzone(el.sceneAudioDrop, el.sceneAudioInput, async (file) => {
+      if (!isAudioFile(file)) {
         alert('오디오 파일(.mp3, .wav, .m4a 등)만 업로드 가능합니다.');
         return;
       }
-      state.audioFile = file;
-      el.audioFileName.textContent = file.name;
-      el.audioFileSize.textContent = formatBytes(file.size);
-      el.audioDrop.style.display = 'none';
-      el.audioLoadedCard.classList.add('active');
-      state.audioPreviewer.loadFile(file);
+      state.sceneAudioFile = file;
+      el.sceneAudioFileName.textContent = file.name;
+      el.sceneAudioFileSize.textContent = formatBytes(file.size);
+      el.sceneAudioDrop.style.display = 'none';
+      el.sceneAudioLoadedCard.classList.add('active');
+      const dur = await state.sceneAudioPreviewer.loadFile(file);
+      if (dur) state.sceneAudioDuration = dur;
+      autoBalanceSceneDurations();
       updateGenerateButtonState();
     });
 
-    el.btnRemoveAudio.addEventListener('click', () => {
-      state.audioFile = null;
-      el.audioInput.value = '';
-      el.audioLoadedCard.classList.remove('active');
-      el.audioDrop.style.display = 'flex';
-      state.audioPreviewer.reset();
+    el.btnRemoveSceneAudio.addEventListener('click', () => {
+      state.sceneAudioFile = null;
+      state.sceneAudioDuration = 0;
+      el.sceneAudioInput.value = '';
+      el.sceneAudioLoadedCard.classList.remove('active');
+      el.sceneAudioDrop.style.display = 'flex';
+      state.sceneAudioPreviewer.reset();
       updateGenerateButtonState();
     });
 
-    // Image Dropzone
-    setupDropzone(el.imageDrop, el.imageInput, (file) => {
+    // Narration Script Upload & Input
+    el.narrationFileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = (re) => {
+          el.narrationText.value = re.target.result;
+          updateNarrationCount();
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    el.narrationText.addEventListener('input', () => {
+      updateNarrationCount();
+    });
+
+    // Auto Distribute Subtitles
+    el.btnDistributeSubs.addEventListener('click', () => {
+      distributeNarrationToScenes();
+    });
+
+    // Auto Balance Duration
+    el.btnAutoBalanceDuration.addEventListener('click', () => {
+      autoBalanceSceneDurations();
+    });
+
+    // Multi-Scene Dropzone
+    el.multiSceneDrop.addEventListener('click', () => el.multiSceneInput.click());
+    el.btnAddScene.addEventListener('click', () => el.multiSceneInput.click());
+
+    ['dragenter', 'dragover'].forEach(name => {
+      el.multiSceneDrop.addEventListener(name, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        el.multiSceneDrop.classList.add('drag-over');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(name => {
+      el.multiSceneDrop.addEventListener(name, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        el.multiSceneDrop.classList.remove('drag-over');
+      });
+    });
+
+    el.multiSceneDrop.addEventListener('drop', (e) => {
+      if (e.dataTransfer.files && e.dataTransfer.files.length) {
+        addSceneFiles(Array.from(e.dataTransfer.files));
+      }
+    });
+
+    el.multiSceneInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length) {
+        addSceneFiles(Array.from(e.target.files));
+        el.multiSceneInput.value = '';
+      }
+    });
+
+    // Subtitle Customizers
+    el.subFontSize.addEventListener('input', (e) => {
+      state.subFontSize = parseInt(e.target.value, 10);
+      el.subFontSizeVal.textContent = `${state.subFontSize}px`;
+      renderLivePreview();
+    });
+
+    el.subFontColorInput.addEventListener('input', (e) => {
+      state.subFontColor = e.target.value;
+      el.subFontColorHex.value = e.target.value;
+      renderLivePreview();
+    });
+
+    el.subFontColorHex.addEventListener('input', (e) => {
+      let val = e.target.value.trim();
+      if (!val.startsWith('#')) val = '#' + val;
+      if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+        state.subFontColor = val;
+        el.subFontColorInput.value = val;
+        renderLivePreview();
+      }
+    });
+
+    el.subBgBox.addEventListener('click', () => {
+      state.subBgStyle = 'box';
+      el.subBgBox.classList.add('active');
+      el.subBgShadow.classList.remove('active');
+      renderLivePreview();
+    });
+
+    el.subBgShadow.addEventListener('click', () => {
+      state.subBgStyle = 'shadow';
+      el.subBgShadow.classList.add('active');
+      el.subBgBox.classList.remove('active');
+      renderLivePreview();
+    });
+
+    [el.subPosTop, el.subPosCenter, el.subPosBottom].forEach(btn => {
+      btn.addEventListener('click', () => {
+        [el.subPosTop, el.subPosCenter, el.subPosBottom].forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.subPosition = btn.dataset.subpos;
+        renderLivePreview();
+      });
+    });
+  }
+
+  function addSceneFiles(files) {
+    const validFiles = files.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'));
+    if (!validFiles.length) {
+      alert('이미지 또는 비디오 파일만 추가할 수 있습니다.');
+      return;
+    }
+
+    validFiles.forEach(file => {
+      const isVideo = file.type.startsWith('video/');
+      const url = URL.createObjectURL(file);
+      const sceneItem = {
+        id: Date.now() + Math.random().toString(36).substring(2, 7),
+        file: file,
+        url: url,
+        name: file.name,
+        type: isVideo ? '동영상' : '이미지',
+        isVideo: isVideo,
+        duration: 3.5,
+        subtitle: '',
+        imgBitmap: null
+      };
+
+      if (!isVideo) {
+        const img = new Image();
+        img.onload = () => {
+          sceneItem.imgBitmap = img;
+          renderLivePreview();
+        };
+        img.src = url;
+      }
+
+      state.scenes.push(sceneItem);
+    });
+
+    if (state.scenes.length === validFiles.length) {
+      state.activeSceneIndex = 0;
+    }
+
+    autoBalanceSceneDurations();
+    renderSceneCards();
+    updateGenerateButtonState();
+    renderLivePreview();
+  }
+
+  function renderSceneCards() {
+    el.scenesContainer.innerHTML = '';
+    el.scenesTotalInfo.textContent = `총 ${state.scenes.length}개 씬 등록됨`;
+
+    state.scenes.forEach((scene, index) => {
+      const card = document.createElement('div');
+      card.className = `scene-card ${index === state.activeSceneIndex ? 'active-preview' : ''}`;
+      card.dataset.index = index;
+
+      card.innerHTML = `
+        <div class="scene-card-top">
+          <div class="scene-badge-group">
+            <span class="scene-num-badge">씬 ${index + 1}</span>
+            <span class="scene-type-tag">${scene.isVideo ? '🎥 동영상' : '🖼️ 이미지'}</span>
+            <div class="scene-duration-wrap">
+              <span>길이:</span>
+              <input type="number" min="0.5" max="300" step="0.5" class="scene-duration-input" value="${scene.duration.toFixed(1)}">
+              <span>초</span>
+            </div>
+          </div>
+          <div class="scene-actions">
+            <button type="button" class="btn-scene-action btn-move-up" title="위로 이동" ${index === 0 ? 'disabled' : ''}>▲</button>
+            <button type="button" class="btn-scene-action btn-move-down" title="아래로 이동" ${index === state.scenes.length - 1 ? 'disabled' : ''}>▼</button>
+            <button type="button" class="btn-scene-action btn-scene-del" title="씬 삭제">🗑️</button>
+          </div>
+        </div>
+        <div class="scene-content-row">
+          <div class="scene-thumb-box" title="클릭 시 실시간 프리뷰 활성화">
+            ${scene.isVideo
+              ? `<video src="${scene.url}" class="scene-thumb-video" muted playsinline></video>`
+              : `<img src="${scene.url}" class="scene-thumb-img" alt="미리보기">`
+            }
+            <span class="scene-preview-hint">미리보기</span>
+          </div>
+          <div class="scene-sub-input-wrap">
+            <textarea class="scene-sub-textarea" placeholder="씬 ${index + 1}에 표시될 나레이션 자막을 입력하세요...">${scene.subtitle || ''}</textarea>
+            <span class="scene-sub-time-hint" id="sceneTimeHint_${index}">타임라인: ${calculateSceneTimeRange(index)}</span>
+          </div>
+        </div>
+      `;
+
+      // Event Listeners
+      const thumbBox = card.querySelector('.scene-thumb-box');
+      thumbBox.addEventListener('click', () => {
+        state.activeSceneIndex = index;
+        document.querySelectorAll('.scene-card').forEach(c => c.classList.remove('active-preview'));
+        card.classList.add('active-preview');
+        renderLivePreview();
+      });
+
+      const subTextarea = card.querySelector('.scene-sub-textarea');
+      subTextarea.addEventListener('input', (e) => {
+        scene.subtitle = e.target.value;
+        if (index === state.activeSceneIndex) {
+          renderLivePreview();
+        }
+      });
+
+      const durInput = card.querySelector('.scene-duration-input');
+      durInput.addEventListener('change', (e) => {
+        const val = parseFloat(e.target.value) || 1.0;
+        scene.duration = Math.max(0.5, val);
+        updateSceneTimeHints();
+      });
+
+      const btnUp = card.querySelector('.btn-move-up');
+      if (btnUp) {
+        btnUp.addEventListener('click', () => {
+          if (index > 0) {
+            const temp = state.scenes[index];
+            state.scenes[index] = state.scenes[index - 1];
+            state.scenes[index - 1] = temp;
+            state.activeSceneIndex = index - 1;
+            renderSceneCards();
+            renderLivePreview();
+          }
+        });
+      }
+
+      const btnDown = card.querySelector('.btn-move-down');
+      if (btnDown) {
+        btnDown.addEventListener('click', () => {
+          if (index < state.scenes.length - 1) {
+            const temp = state.scenes[index];
+            state.scenes[index] = state.scenes[index + 1];
+            state.scenes[index + 1] = temp;
+            state.activeSceneIndex = index + 1;
+            renderSceneCards();
+            renderLivePreview();
+          }
+        });
+      }
+
+      const btnDel = card.querySelector('.btn-scene-del');
+      btnDel.addEventListener('click', () => {
+        state.scenes.splice(index, 1);
+        if (state.activeSceneIndex >= state.scenes.length) {
+          state.activeSceneIndex = Math.max(0, state.scenes.length - 1);
+        }
+        autoBalanceSceneDurations();
+        renderSceneCards();
+        updateGenerateButtonState();
+        renderLivePreview();
+      });
+
+      el.scenesContainer.appendChild(card);
+    });
+  }
+
+  function calculateSceneTimeRange(targetIdx) {
+    let start = 0;
+    for (let i = 0; i < targetIdx; i++) {
+      start += state.scenes[i].duration;
+    }
+    const end = start + (state.scenes[targetIdx]?.duration || 0);
+    return `${start.toFixed(1)}초 ~ ${end.toFixed(1)}초 (${(end - start).toFixed(1)}초간)`;
+  }
+
+  function updateSceneTimeHints() {
+    state.scenes.forEach((_, idx) => {
+      const hint = document.getElementById(`sceneTimeHint_${idx}`);
+      if (hint) {
+        hint.textContent = `타임라인: ${calculateSceneTimeRange(idx)}`;
+      }
+    });
+  }
+
+  function autoBalanceSceneDurations() {
+    if (!state.scenes.length) return;
+    if (state.sceneAudioDuration > 0) {
+      const slice = state.sceneAudioDuration / state.scenes.length;
+      state.scenes.forEach(s => s.duration = Math.round(slice * 10) / 10);
+      updateSceneTimeHints();
+      renderSceneCards();
+    }
+  }
+
+  function updateNarrationCount() {
+    const text = el.narrationText.value.trim();
+    if (!text) {
+      el.scriptSentenceCount.textContent = '0개 문장 감지됨';
+      return;
+    }
+    const sentences = splitIntoSentences(text);
+    el.scriptSentenceCount.textContent = `${sentences.length}개 문장 감지됨`;
+  }
+
+  function splitIntoSentences(text) {
+    // 문장 부호(. ! ? 줄바꿈)를 기준으로 의미 있는 문장 분할
+    const parts = text.split(/(?<=[.?!])\s+|\n+/);
+    return parts.map(s => s.trim()).filter(s => s.length > 0);
+  }
+
+  function distributeNarrationToScenes() {
+    const text = el.narrationText.value.trim();
+    if (!text) {
+      alert('나레이션 대본 텍스트를 먼저 입력하거나 업로드하세요.');
+      return;
+    }
+    if (!state.scenes.length) {
+      alert('자막을 배분할 씬(이미지 또는 동영상)을 먼저 1개 이상 추가해주세요.');
+      return;
+    }
+
+    const sentences = splitIntoSentences(text);
+    const numScenes = state.scenes.length;
+
+    // 문장 개수와 씬 개수에 맞추어 비례 분배
+    if (sentences.length <= numScenes) {
+      state.scenes.forEach((scene, idx) => {
+        scene.subtitle = sentences[idx] || '';
+      });
+    } else {
+      // 문장이 더 많은 경우 씬마다 적절히 합쳐서 분배
+      const sentencesPerScene = Math.ceil(sentences.length / numScenes);
+      state.scenes.forEach((scene, idx) => {
+        const start = idx * sentencesPerScene;
+        const end = Math.min(sentences.length, start + sentencesPerScene);
+        scene.subtitle = sentences.slice(start, end).join(' ');
+      });
+    }
+
+    renderSceneCards();
+    renderLivePreview();
+    alert(`총 ${sentences.length}개의 나레이션 문장이 ${numScenes}개의 씬에 균등하게 자동 배분되었습니다!`);
+  }
+
+  // ==========================================
+  // Classic Studio Implementation
+  // ==========================================
+  function initClassicStudio() {
+    state.classicAudioPreviewer = new AudioWavePreviewer('audioWaveCanvas', 'btnPlayAudio', 'audioTimeLabel');
+    initPresets();
+
+    // Classic Audio Dropzone
+    setupDropzone(el.classicAudioDrop, el.classicAudioInput, (file) => {
+      if (!isAudioFile(file)) {
+        alert('오디오 파일(.mp3, .wav, .m4a 등)만 업로드 가능합니다.');
+        return;
+      }
+      state.classicAudioFile = file;
+      el.classicAudioFileName.textContent = file.name;
+      el.classicAudioFileSize.textContent = formatBytes(file.size);
+      el.classicAudioDrop.style.display = 'none';
+      el.classicAudioLoadedCard.classList.add('active');
+      state.classicAudioPreviewer.loadFile(file);
+      updateGenerateButtonState();
+    });
+
+    el.btnRemoveClassicAudio.addEventListener('click', () => {
+      state.classicAudioFile = null;
+      el.classicAudioInput.value = '';
+      el.classicAudioLoadedCard.classList.remove('active');
+      el.classicAudioDrop.style.display = 'flex';
+      state.classicAudioPreviewer.reset();
+      updateGenerateButtonState();
+    });
+
+    // Classic Image Dropzone
+    setupDropzone(el.classicImageDrop, el.classicImageInput, (file) => {
       if (!file.type.startsWith('image/')) {
         alert('이미지 파일(.jpg, .png, .webp 등)만 업로드 가능합니다.');
         return;
       }
-      state.imageFile = file;
-      el.imageFileName.textContent = file.name;
-      el.imageFileSize.textContent = formatBytes(file.size);
-      el.imageDrop.style.display = 'none';
-      el.imageLoadedCard.classList.add('active');
+      state.classicImageFile = file;
+      el.classicImageFileName.textContent = file.name;
+      el.classicImageFileSize.textContent = formatBytes(file.size);
+      el.classicImageDrop.style.display = 'none';
+      el.classicImageLoadedCard.classList.add('active');
 
       const url = URL.createObjectURL(file);
-      el.imageThumb.src = url;
+      el.classicImageThumb.src = url;
 
       const img = new Image();
       img.onload = () => {
-        state.imageBitmap = img;
+        state.classicImageBitmap = img;
         renderLivePreview();
       };
       img.src = url;
@@ -179,54 +606,21 @@
       updateGenerateButtonState();
     });
 
-    el.btnRemoveImage.addEventListener('click', () => {
-      state.imageFile = null;
-      state.imageBitmap = null;
-      el.imageInput.value = '';
-      el.imageLoadedCard.classList.remove('active');
-      el.imageDrop.style.display = 'flex';
-      el.imageThumb.src = '';
+    el.btnRemoveClassicImage.addEventListener('click', () => {
+      state.classicImageFile = null;
+      state.classicImageBitmap = null;
+      el.classicImageInput.value = '';
+      el.classicImageLoadedCard.classList.remove('active');
+      el.classicImageDrop.style.display = 'flex';
+      el.classicImageThumb.src = '';
       renderLivePreview();
       updateGenerateButtonState();
     });
-  }
 
-  function setupDropzone(dropEl, inputEl, onFileSelected) {
-    dropEl.addEventListener('click', () => inputEl.click());
-    inputEl.addEventListener('change', () => {
-      if (inputEl.files && inputEl.files[0]) {
-        onFileSelected(inputEl.files[0]);
-      }
-    });
-
-    ['dragenter', 'dragover'].forEach(name => {
-      dropEl.addEventListener(name, (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dropEl.classList.add('drag-over');
-      });
-    });
-
-    ['dragleave', 'drop'].forEach(name => {
-      dropEl.addEventListener(name, (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dropEl.classList.remove('drag-over');
-      });
-    });
-
-    dropEl.addEventListener('drop', (e) => {
-      const files = e.dataTransfer.files;
-      if (files && files[0]) {
-        onFileSelected(files[0]);
-      }
-    });
-  }
-
-  function initModeCards() {
-    el.modeCards.forEach(card => {
+    // Classic Mode Cards
+    el.classicModeCards.forEach(card => {
       card.addEventListener('click', () => {
-        el.modeCards.forEach(c => c.classList.remove('active'));
+        el.classicModeCards.forEach(c => c.classList.remove('active'));
         card.classList.add('active');
         state.selectedMode = card.dataset.mode;
         updateOptionsVisibility();
@@ -242,26 +636,13 @@
         updateGenerateButtonState();
       });
     }
-  }
 
-  function updateOptionsVisibility() {
-    const needOverlayOptions = state.batchAll || state.selectedMode === 'waveform_overlay' || state.selectedMode === 'waveform';
-    if (el.optionsPanel) {
-      el.optionsPanel.style.display = needOverlayOptions ? 'block' : 'none';
-    }
-  }
-
-  function initCustomizerInputs() {
-    el.waveColorInput.addEventListener('input', (e) => {
-      applyColor(e.target.value);
-    });
-
+    // Classic Customizers
+    el.waveColorInput.addEventListener('input', (e) => applyClassicColor(e.target.value));
     el.waveColorHex.addEventListener('input', (e) => {
       let val = e.target.value.trim();
       if (!val.startsWith('#')) val = '#' + val;
-      if (/^#[0-9a-fA-F]{6}$/.test(val)) {
-        applyColor(val);
-      }
+      if (/^#[0-9a-fA-F]{6}$/.test(val)) applyClassicColor(val);
     });
 
     el.opacitySlider.addEventListener('input', (e) => {
@@ -276,21 +657,50 @@
       renderLivePreview();
     });
 
-    el.posButtons.forEach(btn => {
+    el.classicPosButtons.forEach(btn => {
       btn.addEventListener('click', () => {
-        el.posButtons.forEach(b => b.classList.remove('active'));
+        el.classicPosButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        state.position = btn.dataset.pos;
+        state.classicPosition = btn.dataset.pos;
         renderLivePreview();
       });
     });
   }
 
-  function initPreviewCanvas() {
-    window.addEventListener('resize', () => renderLivePreview());
+  function initPresets() {
+    if (!el.presetsContainer) return;
+    el.presetsContainer.innerHTML = '';
+    PRESETS.forEach(p => {
+      const chip = document.createElement('div');
+      chip.className = `preset-chip ${p.color.toLowerCase() === state.waveColor.toLowerCase() ? 'active' : ''}`;
+      chip.dataset.color = p.color;
+      chip.innerHTML = `<span class="preset-dot" style="background:${p.color}"></span>${p.name}`;
+      chip.addEventListener('click', () => {
+        applyClassicColor(p.color);
+        document.querySelectorAll('.preset-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+      });
+      el.presetsContainer.appendChild(chip);
+    });
+  }
+
+  function applyClassicColor(hex) {
+    state.waveColor = hex;
+    el.waveColorInput.value = hex;
+    el.waveColorHex.value = hex;
     renderLivePreview();
   }
 
+  function updateOptionsVisibility() {
+    const needOverlayOptions = state.batchAll || state.selectedMode === 'waveform_overlay' || state.selectedMode === 'waveform';
+    if (el.classicOptionsPanel) {
+      el.classicOptionsPanel.style.display = needOverlayOptions ? 'block' : 'none';
+    }
+  }
+
+  // ==========================================
+  // Live 1080p Canvas Preview Engine
+  // ==========================================
   function renderLivePreview() {
     const canvas = el.previewCanvas;
     if (!canvas) return;
@@ -298,58 +708,149 @@
     const width = canvas.width = 1920;
     const height = canvas.height = 1080;
 
-    // Draw Background
-    if (state.imageBitmap && (state.selectedMode !== 'waveform' || state.batchAll)) {
-      // Scale and center cover 16:9
-      const img = state.imageBitmap;
-      const imgAspect = img.width / img.height;
-      const targetAspect = 16 / 9;
-      let drawW, drawH, drawX, drawY;
+    if (state.currentTab === 'scene') {
+      // 씬 & 자막 스튜디오 프리뷰
+      const curScene = state.scenes[state.activeSceneIndex];
+      el.previewSceneIndicator.textContent = state.scenes.length
+        ? `씬 ${state.activeSceneIndex + 1}/${state.scenes.length}`
+        : '씬 없음';
 
-      if (imgAspect > targetAspect) {
-        drawH = height;
-        drawW = height * imgAspect;
-        drawX = (width - drawW) / 2;
-        drawY = 0;
+      if (curScene && curScene.imgBitmap) {
+        drawImageCover(ctx, curScene.imgBitmap, width, height);
       } else {
-        drawW = width;
-        drawH = width / imgAspect;
-        drawX = 0;
-        drawY = (height - drawH) / 2;
+        drawDefaultVoidBackground(ctx, width, height);
       }
-      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+      // 자막 실시간 렌더링
+      if (curScene && curScene.subtitle) {
+        drawSubtitleOverlay(ctx, curScene.subtitle, width, height);
+      }
     } else {
-      // Default Studio Void Background
-      const grad = ctx.createLinearGradient(0, 0, width, height);
-      grad.addColorStop(0, '#0a0e18');
-      grad.addColorStop(1, '#05070d');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, width, height);
+      // 클래식 모드 프리뷰
+      if (state.classicImageBitmap && (state.selectedMode !== 'waveform' || state.batchAll)) {
+        drawImageCover(ctx, state.classicImageBitmap, width, height);
+      } else {
+        drawDefaultVoidBackground(ctx, width, height);
+      }
 
-      // Subtle grid line
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-      ctx.lineWidth = 1;
-      for (let x = 0; x < width; x += 80) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-        ctx.stroke();
+      if (state.selectedMode !== 'static' || state.batchAll) {
+        drawWaveformSimulation(ctx, width, height);
       }
     }
+  }
 
-    // If Static mode only, do not draw waveform
-    if (state.selectedMode === 'static' && !state.batchAll) {
-      return;
+  function drawImageCover(ctx, img, width, height) {
+    const imgAspect = img.width / img.height;
+    const targetAspect = 16 / 9;
+    let drawW, drawH, drawX, drawY;
+
+    if (imgAspect > targetAspect) {
+      drawH = height;
+      drawW = height * imgAspect;
+      drawX = (width - drawW) / 2;
+      drawY = 0;
+    } else {
+      drawW = width;
+      drawH = width / imgAspect;
+      drawX = 0;
+      drawY = (height - drawH) / 2;
+    }
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+  }
+
+  function drawDefaultVoidBackground(ctx, width, height) {
+    const grad = ctx.createLinearGradient(0, 0, width, height);
+    grad.addColorStop(0, '#0a0e18');
+    grad.addColorStop(1, '#05070d');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < width; x += 80) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+  }
+
+  function drawSubtitleOverlay(ctx, text, width, height) {
+    ctx.save();
+    const fontSize = state.subFontSize * 1.6; // 캔버스 1080p 해상도 비율 스케일
+    ctx.font = `600 ${fontSize}px 'Inter', system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // 텍스트 줄바꿈 계산
+    const maxWidth = width * 0.82;
+    const words = text.split(' ');
+    const lines = [];
+    let curLine = '';
+
+    for (const w of words) {
+      const test = curLine ? curLine + ' ' + w : w;
+      if (ctx.measureText(test).width > maxWidth && curLine) {
+        lines.push(curLine);
+        curLine = w;
+      } else {
+        curLine = test;
+      }
+    }
+    if (curLine) lines.push(curLine);
+
+    const lineHeight = fontSize * 1.4;
+    const totalTextHeight = lines.length * lineHeight;
+
+    let centerY = height - 100 - (totalTextHeight / 2);
+    if (state.subPosition === 'top') {
+      centerY = 100 + (totalTextHeight / 2);
+    } else if (state.subPosition === 'center') {
+      centerY = height / 2;
     }
 
-    // Waveform Simulation
+    const startY = centerY - (totalTextHeight / 2) + (lineHeight / 2);
+
+    lines.forEach((line, idx) => {
+      const lineY = startY + (idx * lineHeight);
+      const textMetrics = ctx.measureText(line);
+      const boxW = textMetrics.width + 40;
+      const boxH = fontSize + 16;
+      const boxX = (width - boxW) / 2;
+      const boxY = lineY - (boxH / 2);
+
+      if (state.subBgStyle === 'box') {
+        // 반투명 배경 박스
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+        if (ctx.roundRect) {
+          ctx.beginPath();
+          ctx.roundRect(boxX, boxY, boxW, boxH, 8);
+          ctx.fill();
+        } else {
+          ctx.fillRect(boxX, boxY, boxW, boxH);
+        }
+      } else {
+        // 외곽선 그림자
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 6;
+        ctx.strokeText(line, width / 2, lineY);
+      }
+
+      ctx.fillStyle = state.subFontColor;
+      ctx.fillText(line, width / 2, lineY);
+    });
+
+    ctx.restore();
+  }
+
+  function drawWaveformSimulation(ctx, width, height) {
     const waveH = state.waveHeight;
     let waveY = 0;
-    if (state.position === 'center') {
+    if (state.classicPosition === 'center') {
       waveY = (height - waveH) / 2;
-    } else if (state.position === 'top') {
+    } else if (state.classicPosition === 'top') {
       waveY = 100;
-    } else { // bottom
+    } else {
       waveY = height - waveH - 100;
     }
 
@@ -361,14 +862,13 @@
     ctx.shadowBlur = 14;
     ctx.lineWidth = 3;
 
-    // Draw stylized wave cline curve
     const centerY = waveY + waveH / 2;
     const numPoints = 240;
     ctx.beginPath();
     for (let i = 0; i <= numPoints; i++) {
       const x = (i / numPoints) * width;
       const angle = (i / 15);
-      const envelope = Math.sin((i / numPoints) * Math.PI); // Windowing curve
+      const envelope = Math.sin((i / numPoints) * Math.PI);
       const amp = (Math.sin(angle * 1.8) * 0.4 + Math.cos(angle * 3.7) * 0.35 + Math.sin(angle * 5.5) * 0.25) * (waveH * 0.45) * envelope;
       const y = centerY + amp;
       if (i === 0) ctx.moveTo(x, y);
@@ -376,7 +876,6 @@
     }
     ctx.stroke();
 
-    // Secondary harmonic line for cline aesthetic
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i <= numPoints; i++) {
@@ -393,102 +892,99 @@
     ctx.restore();
   }
 
-  function updateGenerateButtonState() {
-    if (!state.audioFile) {
-      el.btnGenerate.disabled = true;
-      el.btnGenerate.innerHTML = `<span>오디오 파일을 업로드하세요</span>`;
-      return;
-    }
+  // ==========================================
+  // Common Features: Generate Action & API
+  // ==========================================
+  function initCommonFeatures() {
+    window.addEventListener('resize', () => renderLivePreview());
+    initLogToggle();
+    initModal();
 
-    const needImage = state.batchAll || state.selectedMode === 'waveform_overlay' || state.selectedMode === 'static';
-    if (needImage && !state.imageFile) {
-      el.btnGenerate.disabled = true;
-      el.btnGenerate.innerHTML = `<span>배경 이미지를 업로드하세요</span>`;
-      return;
-    }
-
-    el.btnGenerate.disabled = false;
-    let label = '비디오 렌더링 시작';
-    if (state.batchAll) {
-      label = '⚡ 3종 비디오 일괄 렌더링 시작';
-    } else if (state.selectedMode === 'waveform') {
-      label = '🎵 파형 비디오 렌더링 시작';
-    } else if (state.selectedMode === 'waveform_overlay') {
-      label = '🌊 웨이브 오버레이 비디오 렌더링 시작';
-    } else if (state.selectedMode === 'static') {
-      label = '🖼️ 정지 이미지 비디오 렌더링 시작';
-    }
-    el.btnGenerate.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-      <span>${label}</span>
-    `;
-  }
-
-  function initLogToggle() {
-    el.btnToggleLog.addEventListener('click', () => {
-      const isOpen = el.terminalDrawer.classList.toggle('open');
-      el.btnToggleLog.textContent = isOpen ? '로그 닫기 ▲' : 'FFmpeg 로그 보기 ▼';
-    });
-  }
-
-  function initModal() {
-    el.btnCloseModal.addEventListener('click', closeModal);
-    el.videoModal.addEventListener('click', (e) => {
-      if (e.target === el.videoModal) closeModal();
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeModal();
-    });
-  }
-
-  function openModal(title, url) {
-    el.modalTitle.textContent = title;
-    el.modalVideo.src = url;
-    el.videoModal.classList.add('open');
-    el.modalVideo.play().catch(() => {});
-  }
-
-  function closeModal() {
-    el.modalVideo.pause();
-    el.modalVideo.src = '';
-    el.videoModal.classList.remove('open');
-  }
-
-  // Run Video Generation
-  function initRunAction() {
     el.btnGenerate.addEventListener('click', startGeneration);
     el.btnCancel.addEventListener('click', cancelCurrentJob);
   }
 
-  async function startGeneration() {
-    if (!state.audioFile) return;
-
-    let tasks = [];
-    if (state.batchAll) {
-      tasks = ['waveform', 'waveform_overlay', 'static'];
+  function updateGenerateButtonState() {
+    if (state.currentTab === 'scene') {
+      if (!state.sceneAudioFile) {
+        el.btnGenerate.disabled = true;
+        el.btnGenerateText.textContent = '나레이션 오디오를 먼저 업로드하세요';
+        return;
+      }
+      if (!state.scenes.length) {
+        el.btnGenerate.disabled = true;
+        el.btnGenerateText.textContent = '최소 1개 이상의 씬(미디어)을 추가하세요';
+        return;
+      }
+      el.btnGenerate.disabled = false;
+      el.btnGenerateText.textContent = `🎬 씬 & 자막 비디오 렌더링 시작 (총 ${state.scenes.length}개 씬)`;
     } else {
-      tasks = [state.selectedMode];
+      if (!state.classicAudioFile) {
+        el.btnGenerate.disabled = true;
+        el.btnGenerateText.textContent = '오디오 파일을 먼저 업로드하세요';
+        return;
+      }
+      const needImage = state.batchAll || state.selectedMode === 'waveform_overlay' || state.selectedMode === 'static';
+      if (needImage && !state.classicImageFile) {
+        el.btnGenerate.disabled = true;
+        el.btnGenerateText.textContent = '배경 이미지를 먼저 업로드하세요';
+        return;
+      }
+      el.btnGenerate.disabled = false;
+      el.btnGenerateText.textContent = state.batchAll ? '⚡ 3종 비디오 일괄 렌더링 시작' : '비디오 렌더링 시작';
     }
+  }
 
+  async function startGeneration() {
     const fd = new FormData();
-    fd.append('audio', state.audioFile);
-    if (state.imageFile) {
-      fd.append('image', state.imageFile);
-    }
-    fd.append('tasks', tasks.join(','));
-    fd.append('wave_color', state.waveColor);
-    fd.append('opacity', state.opacity);
-    fd.append('wave_height', state.waveHeight);
-    fd.append('position', state.position);
 
-    // Update UI to running state
+    if (state.currentTab === 'scene') {
+      if (!state.sceneAudioFile || !state.scenes.length) return;
+
+      fd.append('audio', state.sceneAudioFile);
+      fd.append('tasks', 'scene_subtitles');
+
+      const meta = state.scenes.map((s, idx) => ({
+        id: idx,
+        file_field: `scene_file_${idx}`,
+        duration: s.duration,
+        subtitle: s.subtitle,
+        is_video: s.isVideo
+      }));
+      fd.append('scenes_meta', JSON.stringify(meta));
+
+      state.scenes.forEach((s, idx) => {
+        fd.append(`scene_file_${idx}`, s.file);
+      });
+
+      fd.append('font_size', state.subFontSize);
+      fd.append('font_color', state.subFontColor);
+      fd.append('bg_style', state.subBgStyle);
+      fd.append('sub_position', state.subPosition);
+
+      updateSteps('upload');
+      updateProgress(5, `씬 ${state.scenes.length}개 및 자막 업로드 중...`);
+    } else {
+      if (!state.classicAudioFile) return;
+
+      let tasks = state.batchAll ? ['waveform', 'waveform_overlay', 'static'] : [state.selectedMode];
+      fd.append('audio', state.classicAudioFile);
+      if (state.classicImageFile) fd.append('image', state.classicImageFile);
+      fd.append('tasks', tasks.join(','));
+      fd.append('wave_color', state.waveColor);
+      fd.append('opacity', state.opacity);
+      fd.append('wave_height', state.waveHeight);
+      fd.append('position', state.classicPosition);
+
+      updateSteps('upload');
+      updateProgress(5, '파일 업로드 중...');
+    }
+
     el.btnGenerate.disabled = true;
     el.monitorPanel.classList.add('active');
     el.resultsContainer.classList.remove('active');
     el.resultsList.innerHTML = '';
     el.terminalLog.textContent = '';
-    updateSteps('upload');
-    updateProgress(5, '파일 업로드 중...');
 
     try {
       const res = await fetch('/api/run', { method: 'POST', body: fd });
@@ -497,7 +993,7 @@
 
       state.activeJobId = data.id;
       updateSteps('analyze');
-      updateProgress(15, '오디오 신호 분석 중...');
+      updateProgress(15, '미디어 신호 분석 및 타임라인 계산 중...');
       startPolling();
     } catch (err) {
       alert('오류: ' + err.message);
@@ -525,18 +1021,18 @@
       if (data.status === 'running') {
         updateSteps('encode');
         const pct = Math.max(20, Math.min(95, data.progress || 25));
-        updateProgress(pct, `${data.current_task || 'FFmpeg 영상 렌더링 중'} (${pct}%)`);
+        updateProgress(pct, `${data.current_task || 'FFmpeg 렌더링 중'} (${pct}%)`);
       } else if (data.status === 'done' || data.status === 'partial') {
         clearInterval(state.pollTimer);
         updateSteps('complete');
-        updateProgress(100, data.status === 'done' ? '✨ 렌더링 완료!' : '⚠️ 일부 작업 완료');
+        updateProgress(100, data.status === 'done' ? '✨ 비디오 렌더링 완료!' : '⚠️ 일부 완료');
         renderResults(data.results || []);
         resetMonitorUI(false);
         fetchLibraryFiles();
       } else if (data.status === 'error' || data.status === 'cancelled') {
         clearInterval(state.pollTimer);
         updateProgress(0, data.status === 'cancelled' ? '작업 취소됨' : '렌더링 실패');
-        alert((data.status === 'cancelled' ? '작업이 취소되었습니다.' : '오류 발생: ') + (data.error || '알 수 없는 오류'));
+        alert((data.status === 'cancelled' ? '작업이 취소되었습니다.' : '오류 발생: ') + (data.error || ''));
         resetMonitorUI(true);
       }
     } catch (err) {
@@ -546,7 +1042,7 @@
 
   async function cancelCurrentJob() {
     if (!state.activeJobId) return;
-    if (!confirm('현재 실행 중인 렌더링 작업을 취소하시겠습니까?')) return;
+    if (!confirm('현재 실행 중인 작업을 취소하시겠습니까?')) return;
     try {
       await fetch(`/api/cancel?id=${state.activeJobId}`, { method: 'POST' });
     } catch (e) {}
@@ -555,10 +1051,7 @@
   function updateProgress(percent, stageText) {
     el.progressBar.style.width = `${percent}%`;
     el.percentageText.textContent = `${percent}%`;
-    el.stageBadge.innerHTML = `
-      <span class="status-beacon"></span>
-      <span>${stageText}</span>
-    `;
+    el.stageBadge.innerHTML = `<span class="status-beacon"></span><span>${stageText}</span>`;
   }
 
   function updateSteps(currentStage) {
@@ -567,20 +1060,15 @@
 
     el.stepPills.forEach((pill, idx) => {
       pill.classList.remove('active', 'done');
-      if (idx < curIdx) {
-        pill.classList.add('done');
-      } else if (idx === curIdx) {
-        pill.classList.add('active');
-      }
+      if (idx < curIdx) pill.classList.add('done');
+      else if (idx === curIdx) pill.classList.add('active');
     });
   }
 
   function resetMonitorUI(fullReset = true) {
     el.btnGenerate.disabled = false;
     updateGenerateButtonState();
-    if (fullReset) {
-      el.monitorPanel.classList.remove('active');
-    }
+    if (fullReset) el.monitorPanel.classList.remove('active');
   }
 
   function renderResults(results) {
@@ -607,7 +1095,7 @@
         </div>
       `;
 
-      card.querySelector('.btn-preview-video').addEventListener('click', (e) => {
+      card.querySelector('.btn-preview-video').addEventListener('click', () => {
         openModal(item.task, item.url);
       });
 
@@ -618,7 +1106,6 @@
     el.resultsContainer.scrollIntoView({ behavior: 'smooth' });
   }
 
-  // Media Library
   async function fetchLibraryFiles() {
     try {
       const res = await fetch('/api/files');
@@ -659,10 +1146,7 @@
           </div>
         `;
 
-        item.querySelector('.btn-play').addEventListener('click', () => {
-          openModal(f.name, f.url);
-        });
-
+        item.querySelector('.btn-play').addEventListener('click', () => openModal(f.name, f.url));
         item.querySelector('.btn-del').addEventListener('click', async () => {
           if (!confirm(`'${f.name}' 파일을 삭제하시겠습니까?`)) return;
           try {
@@ -678,6 +1162,68 @@
     } catch (e) {
       console.warn('Library load failed:', e);
     }
+  }
+
+  function initLogToggle() {
+    el.btnToggleLog.addEventListener('click', () => {
+      const isOpen = el.terminalDrawer.classList.toggle('open');
+      el.btnToggleLog.textContent = isOpen ? '로그 닫기 ▲' : 'FFmpeg 로그 보기 ▼';
+    });
+  }
+
+  function initModal() {
+    el.btnCloseModal.addEventListener('click', closeModal);
+    el.videoModal.addEventListener('click', (e) => {
+      if (e.target === el.videoModal) closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+    });
+  }
+
+  function openModal(title, url) {
+    el.modalTitle.textContent = title;
+    el.modalVideo.src = url;
+    el.videoModal.classList.add('open');
+    el.modalVideo.play().catch(() => {});
+  }
+
+  function closeModal() {
+    el.modalVideo.pause();
+    el.modalVideo.src = '';
+    el.videoModal.classList.remove('open');
+  }
+
+  function setupDropzone(dropEl, inputEl, onFileSelected) {
+    dropEl.addEventListener('click', () => inputEl.click());
+    inputEl.addEventListener('change', () => {
+      if (inputEl.files && inputEl.files[0]) onFileSelected(inputEl.files[0]);
+    });
+
+    ['dragenter', 'dragover'].forEach(name => {
+      dropEl.addEventListener(name, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropEl.classList.add('drag-over');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(name => {
+      dropEl.addEventListener(name, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropEl.classList.remove('drag-over');
+      });
+    });
+
+    dropEl.addEventListener('drop', (e) => {
+      const files = e.dataTransfer.files;
+      if (files && files[0]) onFileSelected(files[0]);
+    });
+  }
+
+  function isAudioFile(file) {
+    return file.type.startsWith('audio/') || /\.(mp3|wav|m4a|ogg|flac|aac)$/i.test(file.name);
   }
 
   function formatBytes(bytes) {

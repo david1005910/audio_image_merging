@@ -14,6 +14,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 from static_video import create_static_video
 from waveform_video import create_waveform_video
 from waveform_overlay_video import create_waveform_overlay_video
+from scene_video import create_scene_video
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -22,7 +23,7 @@ UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
 MAX_UPLOAD_BYTES = 512 * 1024 * 1024
 
-TASKS = ("waveform", "waveform_overlay", "static")
+TASKS = ("waveform", "waveform_overlay", "static", "scene_subtitles")
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -117,6 +118,11 @@ def _run_job(job_id):
             with open(audio_path, "wb") as f:
                 f.write(audio["data"])
 
+            tasks = [t.strip() for t in str(form.get("tasks") or "").split(",") if t.strip() in TASKS]
+            if not tasks:
+                raise ValueError("선택된 작업이 없습니다.")
+
+            # 단일 이미지 파싱
             image_path = None
             image = form.get("image")
             if isinstance(image, dict) and image.get("data"):
@@ -124,10 +130,6 @@ def _run_job(job_id):
                 image_path = os.path.join(UPLOAD_DIR, f"{job_id}_bg{iext}")
                 with open(image_path, "wb") as f:
                     f.write(image["data"])
-
-            tasks = [t.strip() for t in str(form.get("tasks") or "").split(",") if t.strip() in TASKS]
-            if not tasks:
-                raise ValueError("선택된 작업이 없습니다.")
 
             wave_color = _normalize_color(form.get("wave_color"))
             try:
@@ -165,7 +167,61 @@ def _run_job(job_id):
                     return cb
 
                 try:
-                    if task == "waveform":
+                    if task == "scene_subtitles":
+                        # 다중 씬 & 자막 렌더링
+                        raw_meta = form.get("scenes_meta") or "[]"
+                        scenes_meta = json.loads(raw_meta) if isinstance(raw_meta, str) else raw_meta
+                        if not scenes_meta:
+                            raise ValueError("씬(Scene) 메타데이터가 비어 있습니다.")
+
+                        scenes = []
+                        for s_idx, sm in enumerate(scenes_meta):
+                            field_name = sm.get("file_field") or f"scene_file_{s_idx}"
+                            file_obj = form.get(field_name)
+                            m_path = None
+                            if isinstance(file_obj, dict) and file_obj.get("data"):
+                                m_ext = os.path.splitext(file_obj.get("filename") or "")[1].lower() or ".jpg"
+                                m_path = os.path.join(UPLOAD_DIR, f"{job_id}_scene_{s_idx}{m_ext}")
+                                with open(m_path, "wb") as mf:
+                                    mf.write(file_obj["data"])
+                            elif image_path:
+                                m_path = image_path
+                            else:
+                                raise ValueError(f"씬 {s_idx+1}의 미디어 파일이 제공되지 않았습니다.")
+
+                            is_video = bool(sm.get("is_video", False)) or m_path.lower().endswith((".mp4", ".mov", ".webm"))
+                            scenes.append({
+                                "media_path": m_path,
+                                "duration": float(sm.get("duration", 3.0)),
+                                "subtitle": str(sm.get("subtitle", "")).strip(),
+                                "is_video": is_video
+                            })
+
+                        font_size = int(form.get("font_size") or 30)
+                        font_color = str(form.get("font_color") or "#ffffff")
+                        bg_style = str(form.get("bg_style") or "box")
+                        sub_pos = str(form.get("sub_position") or "bottom")
+
+                        out = _out_path("scene", job_id)
+                        job["current_task"] = "씬 & 나레이션 자막 비디오 렌더링 중"
+                        _append_log(job, f"▶ [씬 스튜디오] 총 {len(scenes)}개 씬 결합 및 나레이션 자막 렌더링 시작...")
+                        create_scene_video(
+                            audio_path=audio_path,
+                            scenes=scenes,
+                            output_path=out,
+                            font_size=font_size,
+                            font_color=font_color,
+                            bg_style=bg_style,
+                            position=sub_pos,
+                            progress_callback=make_progress_cb("scene_subtitles"),
+                            cancel_event=cancel_event,
+                            return_log=False
+                        )
+                        job["results"].append({
+                            "task": "씬 & 나레이션 자막 비디오 (Multi-Scene Subtitles)",
+                            "url": f"/download/{os.path.basename(out)}"
+                        })
+                    elif task == "waveform":
                         out = _out_path("waveform", job_id)
                         job["current_task"] = "파형 비디오 렌더링 중"
                         _append_log(job, "▶ [1/3] 파형 영상 (waveform) 렌더링 시작...")
@@ -271,7 +327,7 @@ def parse_multipart(body, content_type):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WaveStudioPro/2.0"
+    server_version = "WaveStudioPro/2.1"
 
     def log_message(self, fmt, *args):
         sys.stderr.write("[webui] %s - %s\n" % (self.address_string(), fmt % args))
