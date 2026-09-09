@@ -1,0 +1,510 @@
+import os
+import re
+import json
+import sys
+import time
+import uuid
+import threading
+from datetime import datetime
+from email import policy
+from email.parser import BytesParser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse, parse_qs, unquote
+
+from static_video import create_static_video
+from waveform_video import create_waveform_video
+from waveform_overlay_video import create_waveform_overlay_video
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
+MAX_UPLOAD_BYTES = 512 * 1024 * 1024
+
+TASKS = ("waveform", "waveform_overlay", "static")
+
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(STATIC_DIR, exist_ok=True)
+os.makedirs(TEMPLATES_DIR, exist_ok=True)
+
+JOBS = {}
+JOBS_LOCK = threading.Lock()
+RUN_LOCK = threading.Lock()
+
+MIME_MAP = {
+    ".html": "text/html; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "application/javascript; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+    ".mp4": "video/mp4",
+    ".mp3": "audio/mpeg",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".ttf": "font/ttf",
+}
+
+
+def _normalize_color(color):
+    color = (color or "").strip()
+    if not color:
+        return "0x00d2ff"
+    if color.startswith("#"):
+        return "0x" + color[1:].lower()
+    if color.lower().startswith("0x"):
+        return "0x" + color[2:].lower()
+    if re.fullmatch(r"[0-9a-fA-F]{6}", color):
+        return "0x" + color.lower()
+    return color
+
+
+def _out_path(prefix, job_id):
+    path = os.path.join(OUTPUT_DIR, f"{prefix}_{job_id}.mp4")
+    if os.path.exists(path):
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+    return path
+
+
+def _append_log(job, text):
+    if not text:
+        return
+    with JOBS_LOCK:
+        job["log"] = (job["log"] + "\n" + text).strip()
+        if len(job["log"]) > 25000:
+            job["log"] = job["log"][-20000:]
+
+
+def _format_size(size_bytes):
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    if size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+
+def _run_job(job_id):
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+    if not job:
+        return
+
+    job["status"] = "running"
+    cancel_event = job["cancel_event"]
+
+    with RUN_LOCK:
+        if cancel_event.is_set():
+            job["status"] = "cancelled"
+            return
+
+        try:
+            form = job["form"]
+            audio = form.get("audio")
+            if not isinstance(audio, dict) or not audio.get("data"):
+                raise ValueError("오디오 파일이 비어 있습니다.")
+
+            ext = os.path.splitext(audio.get("filename") or "")[1].lower() or ".mp3"
+            audio_path = os.path.join(UPLOAD_DIR, f"{job_id}{ext}")
+            with open(audio_path, "wb") as f:
+                f.write(audio["data"])
+
+            image_path = None
+            image = form.get("image")
+            if isinstance(image, dict) and image.get("data"):
+                iext = os.path.splitext(image.get("filename") or "")[1].lower() or ".jpg"
+                image_path = os.path.join(UPLOAD_DIR, f"{job_id}_bg{iext}")
+                with open(image_path, "wb") as f:
+                    f.write(image["data"])
+
+            tasks = [t.strip() for t in str(form.get("tasks") or "").split(",") if t.strip() in TASKS]
+            if not tasks:
+                raise ValueError("선택된 작업이 없습니다.")
+
+            wave_color = _normalize_color(form.get("wave_color"))
+            try:
+                opacity = float(form.get("opacity") or 0.7)
+            except (TypeError, ValueError):
+                opacity = 0.7
+            try:
+                wave_height = int(form.get("wave_height") or 320)
+            except (TypeError, ValueError):
+                wave_height = 320
+
+            position = str(form.get("position") or "bottom").lower()
+            if position not in ("top", "center", "bottom"):
+                position = "bottom"
+
+            failures = []
+            total_tasks = len(tasks)
+
+            for idx, task in enumerate(tasks):
+                if cancel_event.is_set():
+                    job["status"] = "cancelled"
+                    _append_log(job, "✕ 사용자에 의해 작업이 취소되었습니다.")
+                    return
+
+                task_base_pct = int((idx / total_tasks) * 100)
+                task_slice_pct = int(100 / total_tasks)
+
+                def make_progress_cb(task_name):
+                    def cb(pct, line):
+                        if line:
+                            _append_log(job, line)
+                        if pct is not None:
+                            calc = task_base_pct + int((pct / 100.0) * task_slice_pct)
+                            job["progress"] = min(99, max(job["progress"], calc))
+                    return cb
+
+                try:
+                    if task == "waveform":
+                        out = _out_path("waveform", job_id)
+                        job["current_task"] = "파형 비디오 렌더링 중"
+                        _append_log(job, "▶ [1/3] 파형 영상 (waveform) 렌더링 시작...")
+                        create_waveform_video(
+                            audio_path, out,
+                            wave_color=wave_color,
+                            progress_callback=make_progress_cb("waveform"),
+                            cancel_event=cancel_event,
+                            return_log=False
+                        )
+                        job["results"].append({
+                            "task": "파형 비디오 (Waveform)",
+                            "url": f"/download/{os.path.basename(out)}"
+                        })
+                    elif task == "waveform_overlay":
+                        if not image_path:
+                            raise ValueError("배경 이미지가 필요합니다.")
+                        out = _out_path("overlay", job_id)
+                        job["current_task"] = "웨이브 오버레이 렌더링 중"
+                        _append_log(job, "▶ [2/3] 웨이브 오버레이 (waveform_overlay) 합성 시작...")
+                        create_waveform_overlay_video(
+                            audio_path, image_path, out,
+                            wave_color=wave_color, opacity=opacity,
+                            wave_height=wave_height, position=position,
+                            progress_callback=make_progress_cb("waveform_overlay"),
+                            cancel_event=cancel_event,
+                            return_log=False
+                        )
+                        job["results"].append({
+                            "task": "웨이브 오버레이 비디오 (Waveform Overlay)",
+                            "url": f"/download/{os.path.basename(out)}"
+                        })
+                    elif task == "static":
+                        if not image_path:
+                            raise ValueError("배경 이미지가 필요합니다.")
+                        out = _out_path("static", job_id)
+                        job["current_task"] = "정지 이미지 비디오 렌더링 중"
+                        _append_log(job, "▶ [3/3] 정지 이미지 영상 (static) 인코딩 시작...")
+                        create_static_video(
+                            audio_path, image_path, out,
+                            progress_callback=make_progress_cb("static"),
+                            cancel_event=cancel_event,
+                            return_log=False
+                        )
+                        job["results"].append({
+                            "task": "정지 이미지 비디오 (Static Video)",
+                            "url": f"/download/{os.path.basename(out)}"
+                        })
+                except Exception as e:
+                    if cancel_event.is_set():
+                        job["status"] = "cancelled"
+                        return
+                    failures.append(f"✕ {task} 실패: {e}")
+                    _append_log(job, failures[-1])
+
+            if cancel_event.is_set():
+                job["status"] = "cancelled"
+            elif failures and not job["results"]:
+                job["status"] = "error"
+                job["error"] = " | ".join(failures)
+            elif failures:
+                job["status"] = "partial"
+                job["error"] = "일부 작업 실패: " + " | ".join(failures)
+                job["progress"] = 100
+            else:
+                job["status"] = "done"
+                job["progress"] = 100
+                _append_log(job, "✨ === 모든 비디오 렌더링 완료 ===")
+        except Exception as e:
+            if cancel_event.is_set():
+                job["status"] = "cancelled"
+            else:
+                job["status"] = "error"
+                job["error"] = str(e)
+                _append_log(job, f"오류 발생: {e}")
+        finally:
+            job["finished"] = time.time()
+
+
+def parse_multipart(body, content_type):
+    m = re.search(r'boundary=(?:"([^"]+)"|([^;]+))', content_type or "")
+    if not m:
+        raise ValueError("멀티파트 경계값(boundary)을 찾을 수 없습니다.")
+    boundary = (m.group(1) or m.group(2)).strip()
+    msg_headers = (
+        "MIME-Version: 1.0\r\n"
+        f"Content-Type: multipart/form-data; boundary={boundary}\r\n"
+        "\r\n"
+    ).encode("utf-8")
+    msg = BytesParser(policy=policy.default).parsebytes(msg_headers + body)
+    form = {}
+    for part in msg.iter_parts():
+        name = part.get_param("name", header="content-disposition")
+        if name is None:
+            continue
+        filename = part.get_filename()
+        payload = part.get_payload(decode=True)
+        if filename:
+            form[name] = {"filename": filename, "data": payload}
+        else:
+            form[name] = payload.decode("utf-8", "replace") if payload else ""
+    return form
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "WaveStudioPro/2.0"
+
+    def log_message(self, fmt, *args):
+        sys.stderr.write("[webui] %s - %s\n" % (self.address_string(), fmt % args))
+
+    def _send_json(self, code, obj):
+        data = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _send_file(self, full, mime):
+        try:
+            size = os.path.getsize(full)
+        except OSError:
+            self._send_json(404, {"error": "파일을 찾을 수 없습니다."})
+            return
+
+        start, end = 0, size - 1
+        rng = self.headers.get("Range")
+        if rng:
+            m = re.match(r"bytes=(\d*)-(\d*)$", rng.strip())
+            if m:
+                if m.group(1):
+                    start = int(m.group(1))
+                if m.group(2):
+                    end = int(m.group(2))
+            if start > end or start >= size:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.end_headers()
+                return
+
+        length = end - start + 1
+        self.send_response(206 if rng else 200)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(length))
+        if rng:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+
+        with open(full, "rb") as f:
+            f.seek(start)
+            remaining = length
+            while remaining > 0:
+                chunk = f.read(min(65536, remaining))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                remaining -= len(chunk)
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        # Main WebUI Page
+        if path in ("/", "/index.html"):
+            index_path = os.path.join(TEMPLATES_DIR, "index.html")
+            if os.path.isfile(index_path):
+                self._send_file(index_path, "text/html; charset=utf-8")
+            else:
+                self._send_json(404, {"error": "templates/index.html 파일을 찾을 수 없습니다."})
+            return
+
+        # Static Assets
+        if path.startswith("/static/"):
+            rel_path = path[len("/static/"):].lstrip("/")
+            if ".." in rel_path or "\\" in rel_path:
+                self._send_json(400, {"error": "잘못된 경로입니다."})
+                return
+            full_path = os.path.join(STATIC_DIR, rel_path)
+            if os.path.isfile(full_path):
+                ext = os.path.splitext(full_path)[1].lower()
+                mime = MIME_MAP.get(ext, "application/octet-stream")
+                self._send_file(full_path, mime)
+                return
+            self._send_json(404, {"error": "정적 파일을 찾을 수 없습니다."})
+            return
+
+        # API: Generated Files Library
+        if path == "/api/files":
+            files = []
+            if os.path.isdir(OUTPUT_DIR):
+                for name in sorted(os.listdir(OUTPUT_DIR), reverse=True):
+                    full = os.path.join(OUTPUT_DIR, name)
+                    if os.path.isfile(full) and name.lower().endswith(".mp4"):
+                        st = os.stat(full)
+                        files.append({
+                            "name": name,
+                            "size": st.st_size,
+                            "formatted_size": _format_size(st.st_size),
+                            "created_time": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                            "url": "/download/" + name
+                        })
+            self._send_json(200, {"files": files})
+            return
+
+        # API: Job Status
+        if path == "/api/status":
+            jid = (parse_qs(parsed.query).get("id") or [""])[0]
+            with JOBS_LOCK:
+                job = JOBS.get(jid)
+            if not job:
+                self._send_json(404, {"error": "작업을 찾을 수 없습니다."})
+                return
+            self._send_json(200, {
+                "id": job["id"],
+                "status": job["status"],
+                "progress": job.get("progress", 0),
+                "current_task": job.get("current_task", ""),
+                "error": job["error"],
+                "log": job["log"],
+                "results": job["results"],
+            })
+            return
+
+        # Video Download / Streaming
+        if path.startswith("/download/"):
+            name = unquote(path[len("/download/"):])
+            if not name or "/" in name or "\\" in name or ".." in name:
+                self._send_json(400, {"error": "잘못된 파일 이름입니다."})
+                return
+            full = os.path.join(OUTPUT_DIR, name)
+            if not os.path.isfile(full):
+                self._send_json(404, {"error": "파일을 찾을 수 없습니다."})
+                return
+            self._send_file(full, "video/mp4")
+            return
+
+        self._send_json(404, {"error": "경로를 찾을 수 없습니다."})
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        # API: Start Rendering Job
+        if path == "/api/run":
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except (TypeError, ValueError):
+                length = 0
+
+            if length <= 0 or length > MAX_UPLOAD_BYTES:
+                self._send_json(400, {
+                    "error": f"업로드 크기가 올바르지 않습니다. (최대 {MAX_UPLOAD_BYTES // (1024 * 1024)}MB)"
+                })
+                return
+
+            body = self.rfile.read(length)
+            try:
+                form = parse_multipart(body, self.headers.get("Content-Type", ""))
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+                return
+
+            if "audio" not in form:
+                self._send_json(400, {"error": "오디오 파일이 필요합니다."})
+                return
+
+            job_id = uuid.uuid4().hex[:12]
+            job = {
+                "id": job_id,
+                "status": "pending",
+                "progress": 0,
+                "current_task": "대기 중...",
+                "log": "",
+                "results": [],
+                "error": None,
+                "created": time.time(),
+                "form": form,
+                "cancel_event": threading.Event()
+            }
+            with JOBS_LOCK:
+                JOBS[job_id] = job
+
+            threading.Thread(target=_run_job, args=(job_id,), daemon=True).start()
+            self._send_json(200, {"id": job_id})
+            return
+
+        # API: Cancel Job
+        if path == "/api/cancel":
+            jid = (parse_qs(parsed.query).get("id") or [""])[0]
+            with JOBS_LOCK:
+                job = JOBS.get(jid)
+            if not job:
+                self._send_json(404, {"error": "작업을 찾을 수 없습니다."})
+                return
+            job["cancel_event"].set()
+            job["status"] = "cancelled"
+            self._send_json(200, {"ok": True, "message": "작업 취소 요청이 전달되었습니다."})
+            return
+
+        self._send_json(404, {"error": "경로를 찾을 수 없습니다."})
+
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        # API: Delete File
+        if path.startswith("/api/files/"):
+            name = unquote(path[len("/api/files/"):])
+            if not name or "/" in name or "\\" in name or ".." in name:
+                self._send_json(400, {"error": "잘못된 파일 이름입니다."})
+                return
+            full = os.path.join(OUTPUT_DIR, name)
+            if not os.path.isfile(full):
+                self._send_json(404, {"error": "삭제할 파일을 찾을 수 없습니다."})
+                return
+            try:
+                os.remove(full)
+                self._send_json(200, {"deleted": name})
+            except Exception as e:
+                self._send_json(500, {"error": f"파일 삭제 실패: {e}"})
+            return
+
+        self._send_json(404, {"error": "경로를 찾을 수 없습니다."})
+
+
+def main():
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
+    print(f"[webui] WaveStudio Pro 실행 중: http://127.0.0.1:{port} (종료: Ctrl+C)", flush=True)
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\n[webui] 정상 종료됨")
+    finally:
+        httpd.server_close()
+
+
+if __name__ == "__main__":
+    main()
