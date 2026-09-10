@@ -85,6 +85,8 @@
       this.dom.btnAddAudio = document.getElementById('remBtnAddAudio');
       this.dom.inputAddAudio = document.getElementById('remInputAddAudio');
       this.dom.btnAddSubtitle = document.getElementById('remBtnAddSubtitle');
+      this.dom.btnExportSrt = document.getElementById('remBtnExportSrt');
+      this.dom.btnExportTxt = document.getElementById('remBtnExportTxt');
       this.dom.btnSplit = document.getElementById('remBtnSplit');
       this.dom.btnDeleteClip = document.getElementById('remBtnDeleteClip');
       this.dom.btnExport = document.getElementById('remBtnExport');
@@ -186,6 +188,14 @@
         this.dom.btnAddSubtitle.addEventListener('click', () => {
           this.addSubtitleAtPlayhead();
         });
+      }
+
+      if (this.dom.btnExportSrt) {
+        this.dom.btnExportSrt.addEventListener('click', () => this.exportSrtSubtitles());
+      }
+
+      if (this.dom.btnExportTxt) {
+        this.dom.btnExportTxt.addEventListener('click', () => this.exportTxtScript());
       }
 
       if (this.dom.btnSplit) {
@@ -1027,6 +1037,58 @@
       } catch (e) {
         alert('요청 오류: ' + e.message);
       }
+    }
+
+    exportSrtSubtitles() {
+      if (!this.timeline.subtitle_track || this.timeline.subtitle_track.length === 0) {
+        alert('내보낼 자막 클립이 타임라인에 없습니다.');
+        return;
+      }
+      const sorted = [...this.timeline.subtitle_track].sort((a, b) => a.start - b.start);
+      const formatT = (sec) => {
+        const totalMs = Math.round(Math.max(0, sec || 0) * 1000);
+        const ms = totalMs % 1000;
+        const totalS = Math.floor(totalMs / 1000);
+        const s = totalS % 60;
+        const m = Math.floor(totalS / 60) % 60;
+        const h = Math.floor(totalS / 3600);
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
+      };
+
+      let srt = '';
+      sorted.forEach((sub, idx) => {
+        const s = sub.start || 0;
+        const e = sub.end || (s + 3.0);
+        srt += `${idx + 1}\n${formatT(s)} --> ${formatT(e)}\n${(sub.text || '').trim()}\n\n`;
+      });
+
+      const blob = new Blob(["\uFEFF" + srt.trim() + "\n"], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'remotion_subtitles.srt';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    exportTxtScript() {
+      if (!this.timeline.subtitle_track || this.timeline.subtitle_track.length === 0) {
+        alert('내보낼 자막/대본 클립이 타임라인에 없습니다.');
+        return;
+      }
+      const sorted = [...this.timeline.subtitle_track].sort((a, b) => a.start - b.start);
+      let txt = '[Remotion 타임라인 나레이션 자막 전문]\n' + '='.repeat(50) + '\n\n';
+      sorted.forEach((sub) => {
+        const m = Math.floor((sub.start || 0) / 60);
+        const s = Math.floor((sub.start || 0) % 60).toString().padStart(2, '0');
+        txt += `[${m}:${s}] ${(sub.text || '').trim()}\n\n`;
+      });
+
+      const blob = new Blob(["\uFEFF" + txt.trim() + "\n"], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'remotion_narration_script.txt';
+      a.click();
+      URL.revokeObjectURL(a.href);
     }
   }
 

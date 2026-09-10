@@ -72,6 +72,8 @@
       this.dom.btnSendToRemotion = document.getElementById('ytBtnSendToRemotion');
       this.dom.btnSendToScene = document.getElementById('ytBtnSendToScene');
       this.dom.btnDownloadAudio = document.getElementById('ytBtnDownloadAudio');
+      this.dom.btnDownloadTxt = document.getElementById('ytBtnDownloadTxt');
+      this.dom.btnDownloadSrt = document.getElementById('ytBtnDownloadSrt');
     }
 
     _loadStoredApiKey() {
@@ -158,6 +160,26 @@
 
       if (this.dom.btnSendToScene) {
         this.dom.btnSendToScene.addEventListener('click', () => this.sendToSceneStudio());
+      }
+
+      if (this.dom.btnDownloadTxt) {
+        this.dom.btnDownloadTxt.addEventListener('click', (e) => {
+          if (!this.lastResult) return;
+          if (!this.lastResult.txt_url) {
+            e.preventDefault();
+            this._downloadTxtFallback(this.lastResult);
+          }
+        });
+      }
+
+      if (this.dom.btnDownloadSrt) {
+        this.dom.btnDownloadSrt.addEventListener('click', (e) => {
+          if (!this.lastResult) return;
+          if (!this.lastResult.srt_url) {
+            e.preventDefault();
+            this._downloadSrtFallback(this.lastResult);
+          }
+        });
       }
     }
 
@@ -366,6 +388,24 @@
         this.dom.btnDownloadAudio.download = result.audio_url.split('/').pop();
       }
 
+      if (this.dom.btnDownloadTxt) {
+        if (result.txt_url) {
+          this.dom.btnDownloadTxt.href = result.txt_url;
+          this.dom.btnDownloadTxt.download = result.txt_url.split('/').pop();
+        } else {
+          this.dom.btnDownloadTxt.href = '#';
+        }
+      }
+
+      if (this.dom.btnDownloadSrt) {
+        if (result.srt_url) {
+          this.dom.btnDownloadSrt.href = result.srt_url;
+          this.dom.btnDownloadSrt.download = result.srt_url.split('/').pop();
+        } else {
+          this.dom.btnDownloadSrt.href = '#';
+        }
+      }
+
       // 2. Render Sources
       if (this.dom.sourcesList && result.sources) {
         this.dom.sourcesList.innerHTML = '';
@@ -510,6 +550,46 @@
       }
 
       alert('📝 씬 & 나레이션 자막 스튜디오로 대본이 전달되었습니다!');
+    }
+
+    _downloadTxtFallback(result) {
+      const script = result.script || [];
+      const title = (result.sources && result.sources[0]?.title) || 'YouTube 영상';
+      let txt = `[${title} - 한국어 충실 번역 나레이션 전문]\n` + '='.repeat(50) + '\n\n';
+      script.forEach((sec, idx) => {
+        const sName = sec.section || `섹션 ${idx + 1}`;
+        const sTitle = sec.title ? `: ${sec.title}` : '';
+        txt += `■ ${sName}${sTitle}\n${sec.text || ''}\n\n`;
+      });
+      const blob = new Blob(["\uFEFF" + txt.trim() + "\n"], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'korean_narration_script.txt';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    _downloadSrtFallback(result) {
+      const subs = result.subtitles || [];
+      const formatT = (sec) => {
+        const totalMs = Math.round((sec || 0) * 1000);
+        const ms = totalMs % 1000;
+        const totalS = Math.floor(totalMs / 1000);
+        const s = totalS % 60;
+        const m = Math.floor(totalS / 60) % 60;
+        const h = Math.floor(totalS / 3600);
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
+      };
+      let srt = '';
+      subs.forEach((item, idx) => {
+        srt += `${idx + 1}\n${formatT(item.start)} --> ${formatT(item.end)}\n${item.text || ''}\n\n`;
+      });
+      const blob = new Blob(["\uFEFF" + srt.trim() + "\n"], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'korean_subtitles.srt';
+      a.click();
+      URL.revokeObjectURL(a.href);
     }
   }
 

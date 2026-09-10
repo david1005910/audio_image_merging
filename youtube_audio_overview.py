@@ -518,6 +518,47 @@ def _generate_smart_fallback_explainer_script(
 generate_podcast_script_gemini = generate_korean_explainer_script_gemini
 
 
+def format_srt_timestamp(seconds: float) -> str:
+    """초 단위를 SRT 표준 타임스탬프 (HH:MM:SS,mmm) 문자열로 변환합니다."""
+    seconds = max(0.0, float(seconds or 0.0))
+    total_ms = int(round(seconds * 1000))
+    ms = total_ms % 1000
+    total_sec = total_ms // 1000
+    s = total_sec % 60
+    m = (total_sec // 60) % 60
+    h = total_sec // 3600
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def generate_srt_content(subtitles: List[Dict[str, Any]]) -> str:
+    """자막 객체 목록으로부터 표준 SRT 자막 파일 내용(문자열)을 생성합니다."""
+    blocks = []
+    for idx, sub in enumerate(subtitles, 1):
+        st = format_srt_timestamp(sub.get("start", 0.0))
+        et = format_srt_timestamp(sub.get("end", 0.0))
+        txt = (sub.get("text") or "").strip()
+        blocks.append(f"{idx}\n{st} --> {et}\n{txt}\n")
+    return "\n".join(blocks).strip() + "\n"
+
+
+def generate_txt_content(script_sections: List[Dict[str, Any]], title: str = "") -> str:
+    """나레이션 대본 섹션 목록으로부터 읽기 편한 텍스트 대본(.txt) 전문을 생성합니다."""
+    lines = []
+    if title:
+        lines.append(f"[{title} - 한국어 원본 충실 번역 나레이션 전문]")
+        lines.append("=" * 60)
+        lines.append("")
+    for idx, sec in enumerate(script_sections, 1):
+        s_name = sec.get("section", f"섹션 {idx}")
+        s_title = sec.get("title", "")
+        s_text = (sec.get("text") or "").strip()
+        header = f"■ {s_name}" + (f": {s_title}" if s_title else "")
+        lines.append(header)
+        lines.append(s_text)
+        lines.append("")
+    return "\n".join(lines).strip() + "\n"
+
+
 # ==========================================
 # 3. Edge-TTS 단일 해설가 음성 합성 및 타임라인 빌드 (시간 맞춤형 믹싱)
 # ==========================================

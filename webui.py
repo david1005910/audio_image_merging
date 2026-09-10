@@ -23,7 +23,9 @@ from youtube_audio_overview import (
     extract_video_id,
     fetch_youtube_metadata,
     format_duration_str,
-    fetch_youtube_transcript_and_duration
+    fetch_youtube_transcript_and_duration,
+    generate_srt_content,
+    generate_txt_content
 )
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -60,6 +62,8 @@ MIME_MAP = {
     ".ico": "image/x-icon",
     ".mp4": "video/mp4",
     ".mp3": "audio/mpeg",
+    ".txt": "text/plain; charset=utf-8",
+    ".srt": "text/plain; charset=utf-8",
     ".woff": "font/woff",
     ".woff2": "font/woff2",
     ".ttf": "font/ttf",
@@ -439,6 +443,21 @@ def _run_youtube_job(job_id, urls, api_key, language, tone, voice=None, target_d
             progress_callback=progress_cb
         )
 
+        # 나레이션 전문 대본(.txt) 및 SRT 자막 파일(.srt) 자동 생성
+        out_txt_path = os.path.join(OUTPUT_DIR, f"yt_narration_{job_id}.txt")
+        out_srt_path = os.path.join(OUTPUT_DIR, f"yt_subtitles_{job_id}.srt")
+
+        video_title = sources[0].get("title", "YouTube 영상") if sources else "YouTube 영상"
+        txt_content = generate_txt_content(result.get("script", []), title=video_title)
+        srt_content = generate_srt_content(result.get("subtitles", []))
+
+        # UTF-8 with BOM (utf-8-sig)으로 저장하여 윈도우 메모장 및 미디어 플레이어에서 한글 깨짐 방지
+        with open(out_txt_path, "w", encoding="utf-8-sig") as f:
+            f.write(txt_content)
+
+        with open(out_srt_path, "w", encoding="utf-8-sig") as f:
+            f.write(srt_content)
+
         with YT_LOCK:
             job["status"] = "done"
             job["progress"] = 100
@@ -446,6 +465,10 @@ def _run_youtube_job(job_id, urls, api_key, language, tone, voice=None, target_d
             job["result"] = {
                 "audio_url": f"/download/{os.path.basename(out_mp3_path)}",
                 "audio_file": out_mp3_path,
+                "txt_url": f"/download/{os.path.basename(out_txt_path)}",
+                "txt_file": out_txt_path,
+                "srt_url": f"/download/{os.path.basename(out_srt_path)}",
+                "srt_file": out_srt_path,
                 "duration": result["duration"],
                 "target_duration": result.get("target_duration", actual_target),
                 "is_original_duration": is_orig,
