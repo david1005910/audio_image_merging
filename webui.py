@@ -19,7 +19,11 @@ from remotion_engine import render_timeline
 from youtube_audio_overview import (
     process_youtube_urls,
     generate_korean_explainer_script_gemini,
-    synthesize_explainer_audio_and_timeline
+    synthesize_explainer_audio_and_timeline,
+    extract_video_id,
+    fetch_youtube_metadata,
+    format_duration_str,
+    fetch_youtube_transcript_and_duration
 )
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -398,18 +402,31 @@ def _run_youtube_job(job_id, urls, api_key, language, tone, voice=None, target_d
         if not sources:
             raise ValueError("입력된 YouTube URL에서 유효한 영상을 찾을 수 없습니다.")
 
-        progress_cb(35, f"{len(sources)}개 영상 분석 완료. Gemini AI 시간 맞춤형({target_duration}초) 한국어 대본 작성 중...")
+        is_orig = False
+        if str(target_duration).lower() in ("original", "auto", "0"):
+            is_orig = True
+            orig_dur = sources[0].get("duration") or 0
+            actual_target = max(30, min(1800, orig_dur)) if orig_dur > 0 else 180
+            dur_label = f"원본 영상 길이({actual_target}초)"
+        else:
+            try:
+                actual_target = max(30, min(1800, int(target_duration or 180)))
+            except (TypeError, ValueError):
+                actual_target = 180
+            dur_label = f"{actual_target}초"
+
+        progress_cb(35, f"{len(sources)}개 영상 분석 완료. Gemini AI {dur_label} 맞춤형 1인칭 한국어 번역 대본 작성 중...")
         script = generate_korean_explainer_script_gemini(
             sources=sources,
             api_key=api_key,
             language=language,
             tone=tone,
-            target_duration=target_duration
+            target_duration=actual_target
         )
         if not script:
             raise ValueError("한국어 해설 대본 생성에 실패했습니다.")
 
-        progress_cb(50, f"한국어 전문 해설 음성 합성 (Edge-TTS, 목표: {target_duration}초) 진행 중...")
+        progress_cb(50, f"한국어 전문 번역 나레이션 음성 합성 (Edge-TTS, 목표: {dur_label}) 진행 중...")
         out_mp3_path = os.path.join(OUTPUT_DIR, f"yt_explainer_{job_id}.mp3")
 
         result = synthesize_explainer_audio_and_timeline(
@@ -418,19 +435,21 @@ def _run_youtube_job(job_id, urls, api_key, language, tone, voice=None, target_d
             output_mp3_path=out_mp3_path,
             voice=voice or "ko-KR-InJoonNeural",
             language=language,
-            target_duration=target_duration,
+            target_duration=actual_target,
             progress_callback=progress_cb
         )
 
         with YT_LOCK:
             job["status"] = "done"
             job["progress"] = 100
-            job["stage"] = "✨ AI 한국어 충실 번역 나레이션 오디오 완성!"
+            job["stage"] = f"✨ AI 한국어 충실 번역 나레이션 오디오 완성! (길이: {result['duration']}초)"
             job["result"] = {
                 "audio_url": f"/download/{os.path.basename(out_mp3_path)}",
                 "audio_file": out_mp3_path,
                 "duration": result["duration"],
-                "target_duration": result.get("target_duration", target_duration),
+                "target_duration": result.get("target_duration", actual_target),
+                "is_original_duration": is_orig,
+                "original_duration": sources[0].get("duration", actual_target),
                 "script": result["script"],
                 "subtitles": result["subtitles"],
                 "timeline_data": result["timeline_data"],
@@ -441,7 +460,9 @@ def _run_youtube_job(job_id, urls, api_key, language, tone, voice=None, target_d
                         "video_id": s.get("video_id"),
                         "url": s.get("url"),
                         "thumbnail_url": s.get("thumbnail_url"),
-                        "thumbnail_file": s.get("thumbnail_file")
+                        "thumbnail_file": s.get("thumbnail_file"),
+                        "duration": s.get("duration", 0),
+                        "duration_str": s.get("duration_str", "미확인")
                     } for s in sources
                 ]
             }
@@ -618,6 +639,37 @@ class Handler(BaseHTTPRequestHandler):
             })
             return
 
+        # API: YouTube Video Info & Duration Probe
+        if path == "/api/youtube/info":
+            url_param = (parse_qs(parsed.query).get("url") or [""])[0].strip()
+            if not url_param:
+                self._send_json(400, {"error": "URL 매개변수가 필요합니다."})
+                return
+            vid = extract_video_id(url_param)
+            if not vid:
+                self._send_json(400, {"error": "유효한 YouTube URL이 아닙니다."})
+                return
+
+            meta = fetch_youtube_metadata(vid, save_dir=UPLOAD_DIR)
+            dur = meta.get("duration", 0)
+            if dur <= 0:
+                t, trans_dur = fetch_youtube_transcript_and_duration(vid)
+                if trans_dur > 0:
+                    dur = trans_dur
+                    meta["duration"] = dur
+                    meta["duration_str"] = format_duration_str(dur)
+
+            self._send_json(200, {
+                "success": True,
+                "video_id": vid,
+                "title": meta.get("title", ""),
+                "author": meta.get("author", ""),
+                "thumbnail_url": meta.get("thumbnail_url", ""),
+                "duration": dur,
+                "duration_str": meta.get("duration_str", f"{dur}초") if dur > 0 else "미확인"
+            })
+            return
+
         # Video / Audio Download / Streaming
         if path.startswith("/download/"):
             name = unquote(path[len("/download/"):])
@@ -662,11 +714,15 @@ class Handler(BaseHTTPRequestHandler):
             language = str(data.get("language") or "ko")
             tone = str(data.get("tone") or "faithful")
             voice = str(data.get("voice") or "ko-KR-InJoonNeural")
-            try:
-                target_duration = int(data.get("target_duration") or 180)
-                target_duration = max(30, min(600, target_duration))
-            except (TypeError, ValueError):
-                target_duration = 180
+            raw_target = data.get("target_duration")
+            if str(raw_target).lower() in ("original", "auto", "0"):
+                target_duration = "original"
+            else:
+                try:
+                    target_duration = int(raw_target or 180)
+                    target_duration = max(30, min(1800, target_duration))
+                except (TypeError, ValueError):
+                    target_duration = 180
 
             job_id = uuid.uuid4().hex[:12]
             with YT_LOCK:

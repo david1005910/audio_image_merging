@@ -328,6 +328,12 @@
                 <span class="val-badge" id="ytDurationValBadge">3분 (180초)</span>
               </div>
               <div class="duration-preset-group" id="ytDurationPresetGroup">
+                <button type="button" class="btn-duration-preset" data-duration="original" id="ytBtnOriginalDuration">
+                  <span class="d-icon">🎬</span>
+                  <span class="d-label">원본 영상 맞춤</span>
+                  <span class="d-sub">원본 길이 100% 일치</span>
+                  <span class="d-badge-rec">추천</span>
+                </button>
                 <button type="button" class="btn-duration-preset" data-duration="60">
                   <span class="d-icon">⚡</span>
                   <span class="d-label">1분 핵심 번역</span>
@@ -352,15 +358,32 @@
                 <button type="button" class="btn-duration-preset" data-duration="custom" id="ytBtnCustomDuration">
                   <span class="d-icon">⚙️</span>
                   <span class="d-label">직접 입력</span>
-                  <span class="d-sub">30초 ~ 600초</span>
+                  <span class="d-sub">30초 ~ 1800초</span>
                 </button>
+              </div>
+
+              <!-- Original Duration Info Box -->
+              <div class="original-duration-row" id="ytOriginalDurationRow" style="display: none;">
+                <div class="original-dur-card">
+                  <div class="original-dur-icon">🎬</div>
+                  <div class="original-dur-info">
+                    <div class="original-dur-title" id="ytOriginalDurTitle">원본 동영상 시간 100% 자동 맞춤</div>
+                    <div class="original-dur-desc" id="ytOriginalDurDesc">
+                      업로드한 YouTube 영상의 실제 재생 길이를 자동 감지하여 동일한 전체 분량으로 1인칭 직접 번역 나레이션을 생성합니다.
+                    </div>
+                  </div>
+                  <div class="original-dur-badge" id="ytOriginalDetectedBadge">
+                    <span class="pulse-dot"></span>
+                    <span id="ytOriginalDetectedText">YouTube URL 입력 대기 중</span>
+                  </div>
+                </div>
               </div>
 
               <!-- Custom Seconds Input Box -->
               <div class="custom-duration-row" id="ytCustomDurationRow" style="display: none;">
                 <div class="custom-duration-flex">
                   <label class="custom-duration-label" for="ytCustomDurationInput">목표 시간 (초 단위):</label>
-                  <input type="number" id="ytCustomDurationInput" class="form-input custom-dur-input" min="30" max="600" step="10" value="180">
+                  <input type="number" id="ytCustomDurationInput" class="form-input custom-dur-input" min="30" max="1800" step="10" value="180">
                   <span class="custom-unit-label">초 (sec)</span>
                   <span class="custom-char-estimate" id="ytCharEstimate">예상 생성 분량: 약 780자 (±10%)</span>
                 </div>

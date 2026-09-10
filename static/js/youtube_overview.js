@@ -20,6 +20,10 @@
     }
 
     init() {
+      this.isOriginalDuration = false;
+      this.detectedOriginalDuration = 0;
+      this.detectedVideoTitle = '';
+
       this._bindDOMElements();
       this._loadStoredApiKey();
       this._bindEvents();
@@ -40,6 +44,12 @@
       this.dom.customDurationRow = document.getElementById('ytCustomDurationRow');
       this.dom.customDurationInput = document.getElementById('ytCustomDurationInput');
       this.dom.charEstimate = document.getElementById('ytCharEstimate');
+
+      // Original Duration Elements
+      this.dom.originalDurationRow = document.getElementById('ytOriginalDurationRow');
+      this.dom.originalDetectedBadge = document.getElementById('ytOriginalDetectedBadge');
+      this.dom.originalDetectedText = document.getElementById('ytOriginalDetectedText');
+      this.dom.originalDurDesc = document.getElementById('ytOriginalDurDesc');
 
       // Duration Stat Comparison
       this.dom.statTargetDur = document.getElementById('ytStatTargetDur');
@@ -80,6 +90,18 @@
         });
       }
 
+      // Live URL Duration Inspection (debounced)
+      if (this.dom.urlTextarea) {
+        let inspectTimer = null;
+        this.dom.urlTextarea.addEventListener('input', () => {
+          if (inspectTimer) clearTimeout(inspectTimer);
+          inspectTimer = setTimeout(() => this._inspectFirstUrl(), 500);
+        });
+        this.dom.urlTextarea.addEventListener('paste', () => {
+          setTimeout(() => this._inspectFirstUrl(), 100);
+        });
+      }
+
       // Duration Presets
       if (this.dom.durationPresetBtns) {
         this.dom.durationPresetBtns.forEach((btn) => {
@@ -88,13 +110,24 @@
             this.dom.durationPresetBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
-            if (d === 'custom') {
+            if (d === 'original') {
+              this.isOriginalDuration = true;
+              this.isCustomDuration = false;
+              if (this.dom.originalDurationRow) this.dom.originalDurationRow.style.display = 'block';
+              if (this.dom.customDurationRow) this.dom.customDurationRow.style.display = 'none';
+              this.selectedDuration = this.detectedOriginalDuration > 0 ? this.detectedOriginalDuration : 'original';
+              this._inspectFirstUrl();
+            } else if (d === 'custom') {
+              this.isOriginalDuration = false;
               this.isCustomDuration = true;
+              if (this.dom.originalDurationRow) this.dom.originalDurationRow.style.display = 'none';
               if (this.dom.customDurationRow) this.dom.customDurationRow.style.display = 'block';
               const customSec = parseInt(this.dom.customDurationInput ? this.dom.customDurationInput.value : 180, 10) || 180;
-              this.selectedDuration = Math.max(30, Math.min(600, customSec));
+              this.selectedDuration = Math.max(30, Math.min(1800, customSec));
             } else {
+              this.isOriginalDuration = false;
               this.isCustomDuration = false;
+              if (this.dom.originalDurationRow) this.dom.originalDurationRow.style.display = 'none';
               if (this.dom.customDurationRow) this.dom.customDurationRow.style.display = 'none';
               this.selectedDuration = parseInt(d, 10);
             }
@@ -108,7 +141,7 @@
         this.dom.customDurationInput.addEventListener('input', (e) => {
           let val = parseInt(e.target.value, 10);
           if (!isNaN(val)) {
-            val = Math.max(30, Math.min(600, val));
+            val = Math.max(30, Math.min(1800, val));
             this.selectedDuration = val;
             this._updateDurationDisplay();
           }
@@ -128,8 +161,65 @@
       }
     }
 
+    async _inspectFirstUrl() {
+      if (!this.dom.urlTextarea) return;
+      const text = (this.dom.urlTextarea.value || '').trim();
+      const firstLine = text.split(/[\r\n,]+/)[0]?.trim();
+      if (!firstLine || (!firstLine.includes('youtube.com') && !firstLine.includes('youtu.be'))) {
+        return;
+      }
+
+      try {
+        if (this.dom.originalDetectedText) {
+          this.dom.originalDetectedText.textContent = '영상 분석 중...';
+        }
+        const resp = await fetch(`/api/youtube/info?url=${encodeURIComponent(firstLine)}`);
+        const data = await resp.json();
+        if (data.success && data.duration > 0) {
+          this.detectedOriginalDuration = data.duration;
+          this.detectedVideoTitle = data.title;
+          if (this.dom.originalDetectedText) {
+            this.dom.originalDetectedText.textContent = `감지 완료: ${data.duration_str} (${data.duration}초)`;
+          }
+          if (this.dom.originalDurDesc) {
+            this.dom.originalDurDesc.textContent = `[${data.title}] (채널: ${data.author}) 의 원본 길이 ${data.duration_str} (${data.duration}초)에 100% 맞추어 1인칭 충실 번역 나레이션을 생성합니다.`;
+          }
+          if (this.isOriginalDuration) {
+            this.selectedDuration = data.duration;
+            this._updateDurationDisplay();
+          }
+        }
+      } catch (err) {
+        console.warn('URL duration probe error:', err);
+      }
+    }
+
     _updateDurationDisplay() {
-      const sec = this.selectedDuration;
+      if (this.isOriginalDuration) {
+        if (this.detectedOriginalDuration > 0) {
+          const sec = this.detectedOriginalDuration;
+          const min = Math.floor(sec / 60);
+          const rem = sec % 60;
+          const minText = rem > 0 ? `${min}분 ${rem}초 (${sec}초)` : `${min}분 (${sec}초)`;
+          if (this.dom.durationValBadge) {
+            this.dom.durationValBadge.textContent = `🎬 원본 맞춤: ${minText}`;
+          }
+          const estChars = Math.round(Math.max(25, sec - 1.5) * 4.3);
+          if (this.dom.charEstimate) {
+            this.dom.charEstimate.textContent = `예상 생성 분량: 약 ${estChars}자 (원본 ${sec}초 100% 일치)`;
+          }
+        } else {
+          if (this.dom.durationValBadge) {
+            this.dom.durationValBadge.textContent = '🎬 원본 동영상 시간 100% 맞춤';
+          }
+          if (this.dom.charEstimate) {
+            this.dom.charEstimate.textContent = '예상 생성 분량: 원본 영상 길이 자동 감지 후 100% 일치 생성';
+          }
+        }
+        return;
+      }
+
+      const sec = typeof this.selectedDuration === 'number' ? this.selectedDuration : 180;
       const min = Math.floor(sec / 60);
       const rem = sec % 60;
       const minText = rem > 0 ? `${min}분 ${rem}초 (${sec}초)` : `${min}분 (${sec}초)`;
@@ -168,7 +258,8 @@
 
       const voice = this.dom.voiceSelect ? this.dom.voiceSelect.value : 'ko-KR-InJoonNeural';
       const tone = this.dom.toneSelect ? this.dom.toneSelect.value : 'faithful';
-      const targetDuration = this.selectedDuration || 180;
+      const targetDuration = this.isOriginalDuration ? 'original' : (this.selectedDuration || 180);
+      const durLabel = this.isOriginalDuration ? '원본 동영상 시간 맞춤' : `${targetDuration}초`;
 
       // UI state
       this.dom.btnGenerate.disabled = true;
@@ -176,7 +267,7 @@
       this.dom.resultSection.style.display = 'none';
       this.dom.progressFill.style.width = '5%';
       this.dom.percentText.textContent = '5%';
-      this.dom.stageText.textContent = `YouTube 영상 분석 및 시간 맞춤형(${targetDuration}초) 번역 준비 중...`;
+      this.dom.stageText.textContent = `YouTube 영상 분석 및 ${durLabel} 충실 번역 준비 중...`;
 
       try {
         const resp = await fetch('/api/youtube/generate', {
@@ -244,13 +335,14 @@
       this.dom.resultSection.style.display = 'block';
 
       // Duration comparison stats
-      const targetSec = parseInt(result.target_duration || this.selectedDuration || 180, 10);
+      const targetSec = parseInt(result.target_duration || (typeof this.selectedDuration === 'number' ? this.selectedDuration : 180), 10);
       const actualSec = parseFloat(result.duration || 0);
 
       if (this.dom.statTargetDur) {
         const tm = Math.floor(targetSec / 60);
         const ts = targetSec % 60;
-        this.dom.statTargetDur.textContent = `${targetSec}초 (${tm}분 ${ts}초)`;
+        const origPrefix = result.is_original_duration ? '🎬 원본 맞춤 ' : '';
+        this.dom.statTargetDur.textContent = `${origPrefix}${targetSec}초 (${tm}분 ${ts}초)`;
       }
       if (this.dom.statActualDur) {
         const am = Math.floor(actualSec / 60);

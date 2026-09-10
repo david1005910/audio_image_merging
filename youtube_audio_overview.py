@@ -46,15 +46,69 @@ def extract_video_id(url: str) -> Optional[str]:
     return None
 
 
+def format_duration_str(seconds: int) -> str:
+    """초 단위 시간을 'X분 Y초' 형식 문자열로 변환합니다."""
+    if seconds <= 0:
+        return "0초"
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    parts = []
+    if h > 0:
+        parts.append(f"{h}시간")
+    if m > 0:
+        parts.append(f"{m}분")
+    if s > 0 or not parts:
+        parts.append(f"{s}초")
+    return " ".join(parts)
+
+
+def get_youtube_video_duration(video_id: str) -> int:
+    """YouTube 영상의 실제 재생 길이(초)를 다각도로 정밀 추출합니다."""
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            html = resp.read().decode("utf-8", errors="ignore")
+
+        # 1. lengthSeconds in ytInitialPlayerResponse
+        m = re.search(r'"lengthSeconds"\s*:\s*"(\d+)"', html)
+        if m and int(m.group(1)) > 0:
+            return int(m.group(1))
+
+        # 2. approxDurationMs
+        m_ms = re.search(r'"approxDurationMs"\s*:\s*"(\d+)"', html)
+        if m_ms and int(m_ms.group(1)) > 0:
+            return int(int(m_ms.group(1)) / 1000)
+
+        # 3. itemprop="duration" content="PT...M...S"
+        m_iso = re.search(r'itemprop="duration"\s+content="PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?"', html)
+        if m_iso:
+            h = int(m_iso.group(1) or 0)
+            m = int(m_iso.group(2) or 0)
+            s = int(m_iso.group(3) or 0)
+            dur = h * 3600 + m * 60 + s
+            if dur > 0:
+                return dur
+    except Exception as e:
+        print(f"[YouTube] Duration fetch warning for {video_id}: {e}")
+    return 0
+
+
 def fetch_youtube_metadata(video_id: str, save_dir: str) -> Dict[str, Any]:
-    """oEmbed API를 호출하여 영상 제목, 채널명, 썸네일 이미지를 다운로드합니다."""
+    """oEmbed API 및 웹 메타데이터를 호출하여 영상 제목, 채널명, 재생 시간, 썸네일 이미지를 다운로드합니다."""
     info = {
         "video_id": video_id,
         "url": f"https://www.youtube.com/watch?v={video_id}",
         "title": f"YouTube Video ({video_id})",
         "author": "YouTube Creator",
         "thumbnail_url": f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg",
-        "thumbnail_file": None
+        "thumbnail_file": None,
+        "duration": 0,
+        "duration_str": "미확인"
     }
 
     try:
@@ -68,6 +122,12 @@ def fetch_youtube_metadata(video_id: str, save_dir: str) -> Dict[str, Any]:
                 info["thumbnail_url"] = data["thumbnail_url"]
     except Exception as e:
         print(f"[YouTube] oEmbed fetch warning for {video_id}: {e}")
+
+    # 영상 실제 재생 길이(초) 감지
+    dur = get_youtube_video_duration(video_id)
+    if dur > 0:
+        info["duration"] = dur
+        info["duration_str"] = format_duration_str(dur)
 
     # 썸네일 이미지 로컬 저장 (1080p 비주얼 트랙용)
     os.makedirs(save_dir, exist_ok=True)
@@ -100,10 +160,10 @@ def fetch_youtube_metadata(video_id: str, save_dir: str) -> Dict[str, Any]:
     return info
 
 
-def fetch_youtube_transcript(video_id: str) -> str:
-    """youtube-transcript-api를 사용하여 자막 스크립트를 추출합니다. 다국어 및 자동 생성 자막을 모두 지원합니다."""
+def fetch_youtube_transcript_and_duration(video_id: str) -> Tuple[str, int]:
+    """youtube-transcript-api를 사용하여 자막 스크립트 텍스트와 타임스탬프 기반 영상 시간(초)을 추출합니다."""
     if not YouTubeTranscriptApi:
-        return ""
+        return "", 0
 
     try:
         api = YouTubeTranscriptApi()
@@ -127,22 +187,37 @@ def fetch_youtube_transcript(video_id: str) -> str:
                 print(f"[YouTube] Transcript list fetch failed for {video_id}: {e_list}")
 
         if not transcript:
-            return ""
+            return "", 0
 
         lines = []
+        max_end_time = 0.0
         for item in transcript:
             if hasattr(item, "text"):
                 t = str(item.text).strip()
+                st = float(getattr(item, "start", 0.0) or 0.0)
+                dur = float(getattr(item, "duration", 0.0) or 0.0)
             elif isinstance(item, dict):
                 t = str(item.get("text", "")).strip()
+                st = float(item.get("start", 0.0) or 0.0)
+                dur = float(item.get("duration", 0.0) or 0.0)
             else:
                 t = str(item).strip()
+                st, dur = 0.0, 0.0
             if t:
                 lines.append(t)
-        return " ".join(lines)
+            if st + dur > max_end_time:
+                max_end_time = st + dur
+
+        return " ".join(lines), int(round(max_end_time))
     except Exception as e:
         print(f"[YouTube] Transcript not found or error for {video_id}: {e}")
-        return ""
+        return "", 0
+
+
+def fetch_youtube_transcript(video_id: str) -> str:
+    """하위 호환성 자막 추출 함수"""
+    text, _ = fetch_youtube_transcript_and_duration(video_id)
+    return text
 
 
 
@@ -158,8 +233,11 @@ def process_youtube_urls(urls: List[str], save_dir: str) -> List[Dict[str, Any]]
         seen_ids.add(vid)
 
         meta = fetch_youtube_metadata(vid, save_dir)
-        transcript = fetch_youtube_transcript(vid)
+        transcript, trans_dur = fetch_youtube_transcript_and_duration(vid)
         meta["transcript"] = transcript
+        if meta.get("duration", 0) <= 0 and trans_dur > 0:
+            meta["duration"] = trans_dur
+            meta["duration_str"] = format_duration_str(trans_dur)
         sources.append(meta)
 
     return sources
@@ -173,8 +251,8 @@ def _calculate_target_chars(duration_sec: int) -> int:
     목표 나레이션 시간(초)에 부합하는 한국어 스크립트 권장 글자 수(공백 포함)를 계산합니다.
     한국어 Edge-TTS 자연 낭독 기준: 초당 약 4.2~4.4글자
     """
-    duration_sec = max(30, min(600, duration_sec))
-    net_speech_sec = max(25.0, duration_sec - 1.5)
+    duration_sec = max(30, min(1800, duration_sec))
+    net_speech_sec = max(25.0, duration_sec - max(1.5, duration_sec * 0.015))
     return int(round(net_speech_sec * 4.3))
 
 
@@ -198,14 +276,30 @@ def generate_korean_explainer_script_gemini(
     api_key: Optional[str] = None,
     language: str = "ko",
     tone: str = "faithful",
-    target_duration: int = 180
+    target_duration: Any = 180
 ) -> List[Dict[str, str]]:
     """
     수집된 외국어 YouTube 영상의 원본 자막을 요약이나 제3자 해설이 아닌,
     실제 화자의 발화 내용을 1인칭으로 그대로 직접 한국어 번역(Faithful Translation)하여
-    지정된 목표 시간에 부합하는 나레이션 스크립트를 생성합니다.
+    지정된 목표 시간(또는 원본 영상 길이)에 부합하는 나레이션 스크립트를 생성합니다.
     """
-    target_duration = max(30, min(600, int(target_duration or 180)))
+    # target_duration이 "original"이거나 0 이하인 경우 원본 영상 길이에서 자동 추출
+    is_orig = False
+    if str(target_duration).lower() in ("original", "auto", "0"):
+        is_orig = True
+        detected_dur = 0
+        for s in sources:
+            if s.get("duration") and int(s["duration"]) > 0:
+                detected_dur = int(s["duration"])
+                break
+        target_duration = detected_dur if detected_dur > 0 else 180
+    else:
+        try:
+            target_duration = int(target_duration or 180)
+        except (TypeError, ValueError):
+            target_duration = 180
+
+    target_duration = max(30, min(1800, target_duration))
     target_chars = _calculate_target_chars(target_duration)
     target_mins = round(target_duration / 60, 1)
 
@@ -213,20 +307,29 @@ def generate_korean_explainer_script_gemini(
     source_context = ""
     for idx, s in enumerate(sources, 1):
         t_snippet = s.get("transcript", "")
-        if len(t_snippet) > 15000:
-            t_snippet = t_snippet[:15000] + "... (이하 생략)"
-        source_context += f"\n\n### [영상 소스 {idx}]\n- 제목: {s.get('title')}\n- 채널: {s.get('author')}\n- 원문 자막/실제 발화 내용:\n{t_snippet or '(원문 자막이 제공되지 않아 영상 제목과 주제를 중심으로 직접 1인칭 강의 나레이션으로 번역해 주세요)'}"
+        if len(t_snippet) > 25000:
+            t_snippet = t_snippet[:25000] + "... (이하 생략)"
+        s_dur_str = s.get("duration_str", f"{target_duration}초")
+        source_context += f"\n\n### [영상 소스 {idx}]\n- 제목: {s.get('title')}\n- 채널: {s.get('author')}\n- 영상 원본 길이: {s_dur_str}\n- 원문 자막/실제 발화 내용:\n{t_snippet or '(원문 자막이 제공되지 않아 영상 제목과 주제를 중심으로 직접 1인칭 강의 나레이션으로 번역해 주세요)'}"
 
-    # 섹션 수 결정: 시간에 따라 3~5개 섹션
+    # 섹션 수 결정: 시간에 따라 3~8개 섹션
     if target_duration <= 90:
         section_guide = "총 3개 섹션 [도입부 번역, 본론 번역, 결론 번역]"
         num_sections = 3
     elif target_duration <= 210:
         section_guide = "총 4개 섹션 [도입부 번역, 본론 1 번역, 본론 2 번역, 결론 번역]"
         num_sections = 4
-    else:
+    elif target_duration <= 420:
         section_guide = "총 5개 섹션 [도입부 번역, 본론 1 번역, 본론 2 번역, 본론 3 번역, 결론 번역]"
         num_sections = 5
+    elif target_duration <= 720:
+        section_guide = "총 6개 섹션 [도입부 번역, 본론 1~4 번역, 결론 번역]"
+        num_sections = 6
+    else:
+        section_guide = "총 8개 섹션 [도입부 번역, 본론 1~6 번역, 결론 번역]"
+        num_sections = 8
+
+    orig_note = " (★ 원본 영상 전체 시간과 100% 동일하게 일치)" if is_orig else ""
 
     prompt = f"""당신은 외국어(영어 등) 전문 영상 콘텐츠를 원작자의 실제 발화 내용에 입각하여 왜곡 없이 충실히 번역(Faithful Translation)하여 한국어 나레이션으로 직접 전달하는 최고 수준의 전문 번역 나레이터입니다.
 
@@ -238,65 +341,62 @@ def generate_korean_explainer_script_gemini(
    - 영상 속 발표자/화자가 청취자에게 직접 말하는 것처럼 1인칭 나레이션("여러분 안녕하세요, 오늘 우리는 ~를 살펴보겠습니다...", "제가 여기서 강조하고 싶은 점은...", "이 방법의 핵심 원리는...")으로 원문 발화를 그대로 한국어로 직접 번역(Direct Dubbing Translation)하세요.
 2. **원문 자막 내용 충실 번역 (Faithful Translation)**:
    - 주관적인 축약이나 요약을 하지 말고, 원문 자막(Transcript)에 나오는 실제 발화 순서, 구체적인 설명, 예시, 수치 데이터를 생략 없이 그대로 한국어로 번역하세요.
-   - 목표 시간({target_duration}초 $\rightarrow$ 약 {target_chars}자)에 맞추어, 영상 도입부부터 진행되는 실제 발화 내용을 순차적으로 충실하게 번역하여 채우세요.
+   - 목표 시간({target_duration}초{orig_note} $\rightarrow$ 약 {target_chars}자)에 맞추어, 영상 도입부부터 진행되는 실제 발화 내용을 순차적으로 충실하게 번역하여 채우세요.
 3. **목표 나레이션 시간 및 글자 수 엄격 제어**:
-   - 사용자가 설정한 목표 나레이션 시간: **{target_duration}초 (약 {target_mins}분)**
+   - 사용자가 설정한 목표 나레이션 시간: **{target_duration}초 (약 {target_mins}분{orig_note})**
    - 한국어 표준 낭독 속도(초당 약 4.3글자)에 정확히 맞추어, **전체 스크립트의 총 글자 수(공백 포함)가 약 {target_chars}자(±5% 이내)**가 되도록 각 섹션의 텍스트 길이를 정밀하게 맞추세요.
    - 각 섹션당 권장 분량: 약 {target_chars // num_sections}자 내외.
-4. **자연스러운 구어체 나레이션**:
-   - 딱딱한 문어체 직역이 아닌, 귀로 들었을 때 자연스럽고 몰입감 높은 한국어 구어체(해요체/하십시오체)로 번역하세요.
-   - 중요한 영문 전문 용어나 고유명사는 한국어 설명 뒤에 괄호로 병기하세요. (예: 거대언어모델(LLM), 파인튜닝(Fine-tuning) 등)
-5. **섹션 구성**:
-   - {section_guide}
-   - 출력 형식은 반드시 아래와 같은 순수 JSON 배열 형식으로만 응답하세요. 마크다운 태그(```json 등)는 제외하거나 순수 JSON만 반환하세요.
+4. **구조화된 섹션 구성**:
+   - {section_guide}으로 나누어 작성하세요.
+   - 각 섹션의 'text'는 단일 화자(나레이터)가 막힘없이 말할 수 있는 자연스러운 한국어 구어체 문장으로 구성하세요.
 
-[JSON 출력 형식 예시 (직접 번역 나레이션)]:
+[영상 소스 정보]:
+{source_context}
+
+반드시 아래와 같은 순수 JSON 배열(Array) 형식만 응답하세요. 다른 설명이나 마크다운 코드 블록(` ``` `) 없이 오직 JSON 데이터만 출력해야 합니다:
 [
   {{
     "section": "도입부 번역",
-    "title": "원문 도입 발화 번역",
-    "text": "여러분 안녕하세요. 오늘 강의에서는 대규모 언어 모델을 구축할 때 마주하는 가장 큰 기술적 병목과 그 해결책을 직접 살펴보겠습니다..."
+    "title": "원작자의 첫 도입 발화 번역",
+    "text": "1인칭 직접 번역 문장..."
   }},
   {{
     "section": "본론 1 번역",
-    "title": "원문 핵심 설명 번역",
-    "text": "가장 먼저 우리가 주목해야 할 부분은 바로 메모리 대역폭의 한계입니다. 많은 분들이 모델의 파라미터 수에만 집중하지만, 실제 추론 단계에서는..."
+    "title": "원작자의 핵심 개념 설명 번역",
+    "text": "1인칭 직접 번역 문장..."
   }},
+  ...
   {{
-    "section": "마무리 번역",
-    "title": "원문 결론 발화 번역",
-    "text": "결론적으로 이러한 최적화 기법을 적용하면 동일한 하드웨어에서도 처리 속도를 3배 이상 끌어올릴 수 있습니다. 오늘 함께 다룬 핵심 원리들을 여러분의 시스템에도 직접 적용해보시기 바랍니다."
+    "section": "결론 번역",
+    "title": "원작자의 최종 마무리 발화 번역",
+    "text": "1인칭 직접 번역 문장..."
   }}
 ]
-
-[분석 및 번역할 외국어 YouTube 영상 원본 소스]:
-{source_context}
 """
 
-    gemini_key = api_key or os.environ.get("GEMINI_API_KEY")
-
-    if gemini_key:
+    if api_key:
         try:
-            # Gemini 2.0 Flash 호출
-            api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {
-                    "temperature": 0.3,
+                    "temperature": 0.2,
                     "responseMimeType": "application/json"
                 }
             }
             req = urllib.request.Request(
-                api_url,
+                url,
                 data=json.dumps(payload).encode("utf-8"),
                 headers={"Content-Type": "application/json"}
             )
-            with urllib.request.urlopen(req, timeout=35) as resp:
-                res_json = json.loads(resp.read().decode("utf-8"))
-                candidate_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
-                cleaned = candidate_text.strip()
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                text_resp = data["candidates"][0]["content"]["parts"][0]["text"]
+                cleaned = text_resp.strip()
                 if cleaned.startswith("```json"):
                     cleaned = cleaned[7:]
+                elif cleaned.startswith("```"):
+                    cleaned = cleaned[3:]
                 if cleaned.endswith("```"):
                     cleaned = cleaned[:-3]
                 sections = json.loads(cleaned.strip())
@@ -312,23 +412,39 @@ def generate_korean_explainer_script_gemini(
 def _generate_smart_fallback_explainer_script(
     sources: List[Dict[str, Any]],
     language: str = "ko",
-    target_duration: int = 180
+    target_duration: Any = 180
 ) -> List[Dict[str, str]]:
     """
     원문 자막(Transcript)이 존재하는 경우, 제3자 요약이나 논평이 아닌
     실제 원문 발화 문장들을 직접 1인칭으로 충실 번역(Faithful Translation)하여 대본을 구성합니다.
     자막이 없는 경우에도 제3자 리뷰가 아닌 영상 주제에 대한 1인칭 직접 설명 나레이션으로 구성합니다.
     """
-    target_duration = max(30, min(600, int(target_duration or 180)))
+    if str(target_duration).lower() in ("original", "auto", "0"):
+        detected_dur = 0
+        for s in sources:
+            if s.get("duration") and int(s["duration"]) > 0:
+                detected_dur = int(s["duration"])
+                break
+        target_duration = detected_dur if detected_dur > 0 else 180
+    else:
+        try:
+            target_duration = int(target_duration or 180)
+        except (TypeError, ValueError):
+            target_duration = 180
+
+    target_duration = max(30, min(1800, target_duration))
     target_chars = _calculate_target_chars(target_duration)
 
-    # 섹션 수 결정: 60초는 3개, 120~210초는 4개, 300초는 5개
     if target_duration <= 90:
         num_sections = 3
     elif target_duration <= 210:
         num_sections = 4
-    else:
+    elif target_duration <= 420:
         num_sections = 5
+    elif target_duration <= 720:
+        num_sections = 6
+    else:
+        num_sections = 8
 
     transcript = ""
     for s in sources:
@@ -340,7 +456,6 @@ def _generate_smart_fallback_explainer_script(
     title1 = sources[0].get("title", "핵심 기술 주제") if len(sources) > 0 else "주요 주제"
 
     if transcript:
-        # 실제 자막이 있을 경우: 목표 글자 수에 해당하는 단어 분량 추출 (영어 1단어 ≈ 한국어 2.8글자)
         words = transcript.split()
         needed_words = int(target_chars / 2.8)
         selected_text = " ".join(words[:max(needed_words, 40)])
@@ -369,79 +484,33 @@ def _generate_smart_fallback_explainer_script(
                 "title": f"원문 {sec_name}",
                 "text": ko_text
             })
-        if results and len(results) == num_sections:
+        if results and len(results) >= max(2, num_sections - 1):
             return results
 
-    # 자막이 없거나 짧은 경우: 1인칭 직접 강의/설명 나레이션 (절대 제3자 리뷰 아님)
-    if num_sections == 3:
-        return [
-            {
-                "section": "도입부 번역",
-                "title": "주제 도입 및 문제 정의",
-                "text": f"여러분 안녕하세요. 오늘 우리가 함께 살펴볼 핵심 주제는 바로 {title1}입니다. 기존의 방식들이 마주했던 한계를 짚어보고, 왜 새로운 접근법이 필요한지 하나씩 살펴보겠습니다."
-            },
-            {
-                "section": "본론 번역",
-                "title": "핵심 메커니즘 및 상세 원리",
-                "text": "구체적인 원리를 살펴보면, 가장 중요한 것은 병목을 유발하는 불필요한 연산을 제거하고 데이터 처리 파이프라인의 효율을 극대화하는 것입니다. 실제 테스트에서도 월등한 성능 개선이 확인됩니다."
-            },
-            {
-                "section": "결론 번역",
-                "title": "핵심 마무리 및 정리",
-                "text": "결론적으로 이러한 새로운 구조를 이해하고 실무에 적용한다면 시스템의 안정성과 생산성을 비약적으로 끌어올릴 수 있습니다. 오늘 공유해 드린 내용을 여러분의 프로젝트에도 꼭 적용해 보시기 바랍니다."
-            }
-        ]
+    # 자막이 없거나 짧은 경우: 1인칭 직접 강의/설명 나레이션 (동적 섹션 구성)
+    base_sections = [
+        ("도입부 번역", "주제 도입 및 문제 정의", f"여러분 안녕하세요. 오늘 우리가 함께 살펴볼 핵심 주제는 바로 {title1}입니다. 기존의 방식들이 마주했던 한계를 짚어보고, 왜 새로운 접근법이 필요한지 하나씩 살펴보겠습니다."),
+        ("본론 1 번역", "구조적 배경과 새로운 아키텍처", "먼저 기존의 전통적인 방식이 겪고 있던 근본적인 한계를 살펴보겠습니다. 확장성과 지연 시간 측면에서 심각한 병목이 발생하고 있었으며, 이를 극복하기 위해 설계된 새로운 아키텍처가 제안되었습니다."),
+        ("본론 2 번역", "핵심 메커니즘 및 알고리즘", "구체적인 원리를 살펴보면, 가장 중요한 것은 병목을 유발하는 불필요한 연산을 제거하고 데이터 처리 파이프라인의 효율을 극대화하는 것입니다. 실제 테스트에서도 월등한 성능 개선이 확인됩니다."),
+        ("본론 3 번역", "실제 벤치마크 및 검증 데이터", "실제 다양한 환경에서 진행된 벤치마크 결과는 매우 고무적입니다. 자원 소모량은 획기적으로 줄어든 반면, 응답 속도와 신뢰성은 비약적으로 향상되었음을 수치로 분명히 확인할 수 있습니다."),
+        ("본론 4 번역", "심화 최적화 기법 및 튜닝", "보다 고도화된 성능을 원한다면 캐싱 계층의 비동기 갱신과 메모리 레이아웃 정렬을 최적화해야 합니다. 세부 튜닝을 통해 시스템 지연 시간을 최저 수준으로 유지할 수 있습니다."),
+        ("본론 5 번역", "실무 적용 시 주의점 및 트러블슈팅", "실제 배포 환경에서 발생할 수 있는 잠재적 이슈들을 사전에 차단하기 위해 헬스체크와 복구 전략을 미리 정의해 두는 것이 권장됩니다."),
+        ("본론 6 번역", "장기 확장성 및 미래 전망", "장기적인 관점에서는 컴포넌트 간 결합도를 낮추고 표준화된 인터페이스를 준수함으로써 유연한 확장성을 보장할 수 있습니다."),
+        ("결론부 번역", "핵심 요약 및 실행 방안", "결론적으로 이러한 새로운 구조를 이해하고 실무에 적용한다면 시스템의 안정성과 생산성을 비약적으로 끌어올릴 수 있습니다. 오늘 공유해 드린 내용을 여러분의 프로젝트에도 꼭 적용해 보시기 바랍니다.")
+    ]
+
+    if num_sections <= 3:
+        sel = [base_sections[0], base_sections[2], base_sections[-1]]
     elif num_sections == 4:
-        return [
-            {
-                "section": "도입부 번역",
-                "title": "주제 도입 및 배경",
-                "text": f"여러분 안녕하십니까. 이번 시간 우리는 {title1}에 대해 깊이 있게 탐구해 보고자 합니다. 최근 업계에서 왜 이 주제가 이토록 뜨거운 주목을 받고 있는지 그 배경부터 명확히 짚어보겠습니다."
-            },
-            {
-                "section": "본론 1 번역",
-                "title": "기존 한계와 새로운 아키텍처",
-                "text": "먼저 기존의 전통적인 방식이 겪고 있던 근본적인 한계를 살펴보겠습니다. 확장성과 지연 시간 측면에서 심각한 병목이 발생하고 있었으며, 이를 극복하기 위해 설계된 새로운 아키텍처가 제안되었습니다."
-            },
-            {
-                "section": "본론 2 번역",
-                "title": "세부 메커니즘과 데이터 분석",
-                "text": "세부 메커니즘을 들여다보면, 모듈화된 파이프라인과 실시간 피드백 루프를 통해 처리 효율을 극대화하고 있습니다. 벤치마크 테스트에서도 기존 대비 3배 이상의 성능 향상을 뚜렷하게 입증하고 있습니다."
-            },
-            {
-                "section": "결론 번역",
-                "title": "핵심 시사점 및 미래 전망",
-                "text": "결론적으로 이 혁신적인 패러다임을 선제적으로 도입하는 것이 미래 경쟁력을 확보하는 가장 확실한 방법입니다. 오늘 살펴본 핵심 통찰을 여러분의 업무와 시스템에 적극적으로 활용해 보시기 바랍니다."
-            }
-        ]
+        sel = [base_sections[0], base_sections[1], base_sections[2], base_sections[-1]]
+    elif num_sections == 5:
+        sel = [base_sections[0], base_sections[1], base_sections[2], base_sections[3], base_sections[-1]]
+    elif num_sections == 6:
+        sel = [base_sections[0], base_sections[1], base_sections[2], base_sections[3], base_sections[4], base_sections[-1]]
     else:
-        return [
-            {
-                "section": "도입부 번역",
-                "title": "주제 도입 및 배경 맥락",
-                "text": f"여러분 안녕하십니까. 오늘 우리는 {title1}에 대해 심층적으로 다루어 보겠습니다. 지금 전 세계적으로 왜 이 기술과 접근법에 주목하고 있는지 근본적인 배경 맥락부터 시작하겠습니다."
-            },
-            {
-                "section": "본론 1 번역",
-                "title": "구조적 문제점과 요구사항",
-                "text": "과거의 시스템들은 급격히 늘어나는 데이터와 복잡한 요구사항을 감당하기에 구조적인 한계가 있었습니다. 이를 해결하기 위해 새로운 패러다임의 아키텍처가 필연적으로 등장하게 되었습니다."
-            },
-            {
-                "section": "본론 2 번역",
-                "title": "핵심 알고리즘 및 솔루션",
-                "text": "핵심 메커니즘은 매우 직관적이고 강력합니다. 복잡한 워크플로우를 단계별로 모듈화하고 최적화된 라우팅을 적용함으로써 전체적인 처리 속도와 정확도를 동시에 혁신적으로 개선합니다."
-            },
-            {
-                "section": "본론 3 번역",
-                "title": "실제 검증 데이터 및 적용 사례",
-                "text": "실제 다양한 환경에서 진행된 벤치마크 결과는 매우 고무적입니다. 자원 소모량은 획기적으로 줄어든 반면, 응답 속도와 신뢰성은 비약적으로 향상되었음을 수치로 분명히 확인할 수 있습니다."
-            },
-            {
-                "section": "결론 번역",
-                "title": "최종 요약 및 실행 방안",
-                "text": "결론적으로 원리를 명확히 이해하고 실제 환경에 한 발 앞서 적용해 보는 것이 가장 중요합니다. 오늘 공유해 드린 실무 팁과 원리들을 여러분의 개발과 분석 환경에 바로 적용해 보시기 바랍니다."
-            }
-        ]
+        sel = base_sections[:num_sections]
+
+    return [{"section": s[0], "title": s[1], "text": s[2]} for s in sel]
 
 
 
@@ -516,7 +585,19 @@ def synthesize_explainer_audio_and_timeline(
         section_durations.append(dur)
 
     # 2. 목표 나레이션 시간에 맞춘 동적 호흡(Pause) 간격 계산 및 정밀 무음 생성
-    target = float(target_duration or 180)
+    is_orig = False
+    if str(target_duration).lower() in ("original", "auto", "0"):
+        is_orig = True
+        orig_dur = 0
+        if sources and len(sources) > 0:
+            orig_dur = int(sources[0].get("duration") or 0)
+        target = float(orig_dur if orig_dur > 0 else 180)
+    else:
+        try:
+            target = float(target_duration or 180)
+        except (TypeError, ValueError):
+            target = 180.0
+
     total_speech_time = sum(section_durations)
     pause_count = max(1, total_sections - 1)
 
@@ -732,6 +813,8 @@ def synthesize_explainer_audio_and_timeline(
         "audio_file": output_mp3_path,
         "duration": total_duration,
         "target_duration": int(target),
+        "is_original_duration": is_orig,
+        "original_duration": int(sources[0].get("duration", int(target))) if sources else int(target),
         "script": script_sections,
         "subtitles": subtitles,
         "timeline_data": timeline_data,
