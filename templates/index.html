@@ -40,8 +40,8 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
         </svg>
-        <span>🎙️ YouTube 동영상 AI 한국어 해설 (Audio Overview)</span>
-        <span class="tab-highlight-badge">한국어 심층 해설</span>
+        <span>🎙️ 외국어 동영상 충실 번역 & 맞춤 나레이션 (Faithful Translation)</span>
+        <span class="tab-highlight-badge">원문 충실 번역 & 시간 제어</span>
       </button>
       <button type="button" class="studio-tab-btn active" id="tabRemotionStudio" data-tab="remotion">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -292,17 +292,18 @@
             </svg>
             <span>🎙️ YouTube 동영상 AI 한국어 심층 해설 (Audio Overview)</span>
           </div>
-          <span class="panel-hint">영어 및 다국어 영상 → 한국어 전문 해설 나레이션 자동 생성</span>
+          <span class="panel-hint">외국어 영상 원본 충실 번역 & 사용자 지정 시간 맞춤형 한국어 나레이션</span>
         </div>
 
         <!-- Feature Intro Banner -->
         <div class="yt-feature-banner">
-          <div class="banner-badge">YouTube AI Explainer Engine</div>
-          <h3>영어 & 글로벌 동영상 교차 분석 및 한국어 전문 해설 생성</h3>
+          <div class="banner-badge">Faithful Korean Translation & Narration Engine</div>
+          <h3>외국어 동영상 원본 충실 번역 & 시간 맞춤형 한국어 나레이션</h3>
           <p>
-            분석하고 싶은 YouTube 영상 링크(영어, 다국어 영상 포함)를 아래에 입력하세요. 
-            Google Gemini AI가 영상의 핵심 논점과 맥락을 완벽히 파악하여, 
-            <strong>단독 전문 해설가의 자연스러운 한국어 나레이션 음성(Edge-TTS)</strong>과 Remotion 1080p 타임라인을 자동 생성합니다.
+            분석하고 싶은 외국어(영어 등) YouTube 영상 링크를 입력하세요. 
+            원작자의 설명과 의도에 입각하여 <strong>왜곡 없이 충실히 번역(Faithful Translation)</strong>하고, 
+            <strong>희망하는 나레이션 시간(1분, 2분, 3분, 5분 또는 초 단위 직접 입력)</strong>에 정확히 맞추어 
+            한국어 전문 나레이션 음성(Edge-TTS)과 Remotion 1080p 타임라인을 자동 생성합니다.
           </p>
         </div>
 
@@ -310,11 +311,60 @@
           <div class="yt-form-column">
             <div class="form-group">
               <label class="form-label" for="ytUrlsInput">
-                <span>분석할 YouTube 영상 링크들 (다중 입력 가능)</span>
+                <span>번역할 YouTube 영상 링크 (외국어/영어 영상 권장)</span>
                 <span class="req-badge">필수</span>
               </label>
-              <textarea id="ytUrlsInput" class="form-textarea yt-urls-textarea" rows="4" placeholder="분석하고 싶은 YouTube 영상 URL을 한 줄에 하나씩 입력하세요. (영어 영상도 한국어로 완벽 해설)&#10;예시:&#10;https://www.youtube.com/watch?v=dQw4w9WgXcQ&#10;https://youtu.be/example_video_2"></textarea>
-              <div class="form-hint">영어 등 외국어 영상의 경우 내용을 정확히 이해하여 청취자가 듣기 편한 한국어로 친절히 설명해 드립니다.</div>
+              <textarea id="ytUrlsInput" class="form-textarea yt-urls-textarea" rows="3" placeholder="번역하고 싶은 YouTube 영상 URL을 입력하세요. (단일 영상 충실 번역 또는 다중 영상 교차 분석)&#10;예시:&#10;https://www.youtube.com/watch?v=dQw4w9WgXcQ"></textarea>
+              <div class="form-hint">원작자의 설명 순서와 논리를 있는 그대로 살려 듣기 편한 자연스러운 한국어 구어체로 충실히 번역합니다.</div>
+            </div>
+
+            <!-- Target Narration Duration Control Group -->
+            <div class="form-group yt-duration-container">
+              <div class="form-label-row">
+                <label class="form-label">
+                  <span>⏱️ 나레이션 희망 시간 설정 (Target Narration Duration)</span>
+                  <span class="req-badge">시간 맞춤형</span>
+                </label>
+                <span class="val-badge" id="ytDurationValBadge">3분 (180초)</span>
+              </div>
+              <div class="duration-preset-group" id="ytDurationPresetGroup">
+                <button type="button" class="btn-duration-preset" data-duration="60">
+                  <span class="d-icon">⚡</span>
+                  <span class="d-label">1분 핵심 번역</span>
+                  <span class="d-sub">60초 (~260자)</span>
+                </button>
+                <button type="button" class="btn-duration-preset" data-duration="120">
+                  <span class="d-icon">🎯</span>
+                  <span class="d-label">2분 균형 번역</span>
+                  <span class="d-sub">120초 (~520자)</span>
+                </button>
+                <button type="button" class="btn-duration-preset active" data-duration="180">
+                  <span class="d-icon">📖</span>
+                  <span class="d-label">3분 상세 번역</span>
+                  <span class="d-sub">180초 (~780자)</span>
+                  <span class="d-badge-def">기본</span>
+                </button>
+                <button type="button" class="btn-duration-preset" data-duration="300">
+                  <span class="d-icon">📚</span>
+                  <span class="d-label">5분 심층 번역</span>
+                  <span class="d-sub">300초 (~1300자)</span>
+                </button>
+                <button type="button" class="btn-duration-preset" data-duration="custom" id="ytBtnCustomDuration">
+                  <span class="d-icon">⚙️</span>
+                  <span class="d-label">직접 입력</span>
+                  <span class="d-sub">30초 ~ 600초</span>
+                </button>
+              </div>
+
+              <!-- Custom Seconds Input Box -->
+              <div class="custom-duration-row" id="ytCustomDurationRow" style="display: none;">
+                <div class="custom-duration-flex">
+                  <label class="custom-duration-label" for="ytCustomDurationInput">목표 시간 (초 단위):</label>
+                  <input type="number" id="ytCustomDurationInput" class="form-input custom-dur-input" min="30" max="600" step="10" value="180">
+                  <span class="custom-unit-label">초 (sec)</span>
+                  <span class="custom-char-estimate" id="ytCharEstimate">예상 생성 분량: 약 780자 (±10%)</span>
+                </div>
+              </div>
             </div>
 
             <div class="form-row">
@@ -327,7 +377,7 @@
               </div>
 
               <div class="form-group">
-                <label class="form-label" for="ytVoiceSelect">해설자 음성 선택</label>
+                <label class="form-label" for="ytVoiceSelect">나레이터 음성 선택</label>
                 <select id="ytVoiceSelect" class="form-select">
                   <option value="ko-KR-InJoonNeural" selected>남성 전문 해설가 (인준 - 신뢰감 있는 톤)</option>
                   <option value="ko-KR-SunHiNeural">여성 친절한 해설가 (선희 - 밝고 명쾌한 톤)</option>
@@ -336,10 +386,11 @@
               </div>
 
               <div class="form-group">
-                <label class="form-label" for="ytToneSelect">해설 스타일</label>
+                <label class="form-label" for="ytToneSelect">번역 & 해설 스타일</label>
                 <select id="ytToneSelect" class="form-select">
-                  <option value="deep_dive" selected>심층 해설 & 배경 설명 (Deep Explainer)</option>
-                  <option value="summary">핵심 3분 요약 리포트 (Quick Summary)</option>
+                  <option value="faithful" selected>원문 충실 번역 (Faithful - 원작자의 논리/데이터 그대로 전달)</option>
+                  <option value="deep_dive">심층 해설 & 배경 설명 풀이 (Deep Explainer)</option>
+                  <option value="summary">핵심 논점 압축 요약 번역 (Quick Summary)</option>
                   <option value="actionable">실무 적용 & 인사이트 중심 (Key Takeaways)</option>
                 </select>
               </div>
@@ -349,7 +400,7 @@
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
               </svg>
-              <span>🎙️ 동영상 분석 & 한국어 AI 해설 오디오 생성 시작</span>
+              <span>🎙️ 원본 충실 번역 & 시간 맞춤 한국어 나레이션 오디오 생성 시작</span>
             </button>
           </div>
         </div>
@@ -376,13 +427,31 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="color:var(--accent-emerald)">
               <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
             </svg>
-            <span>생성된 한국어 AI 해설 오디오 (Audio Overview)</span>
+            <span>생성된 한국어 원본 충실 번역 나레이션 오디오</span>
           </div>
           <div class="yt-result-actions">
-            <a id="ytBtnDownloadAudio" class="btn-lib-action" download="korean_audio_explainer.mp3">
+            <a id="ytBtnDownloadAudio" class="btn-lib-action" download="korean_faithful_narration.mp3">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
               <span>오디오 다운로드 (.mp3)</span>
             </a>
+          </div>
+        </div>
+
+        <!-- Target Duration vs Actual Duration Comparison Bar -->
+        <div class="yt-duration-compare-bar" id="ytDurationCompareBar">
+          <div class="dur-stat-item">
+            <span class="dur-stat-label">🎯 설정한 목표 시간:</span>
+            <span class="dur-stat-val" id="ytStatTargetDur">180초 (3분 0초)</span>
+          </div>
+          <div class="dur-stat-divider"></div>
+          <div class="dur-stat-item">
+            <span class="dur-stat-label">⏱️ 완성된 오디오 길이:</span>
+            <span class="dur-stat-val active-green" id="ytStatActualDur">179.2초 (2분 59초)</span>
+          </div>
+          <div class="dur-stat-divider"></div>
+          <div class="dur-stat-item">
+            <span class="dur-stat-label">✨ 시간 정밀 일치율:</span>
+            <span class="dur-stat-val stat-badge-match" id="ytStatMatchRate">99.5%</span>
           </div>
         </div>
 
@@ -397,7 +466,7 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zM12 5.5v9l6-4.5-6-4.5z"/>
             </svg>
-            <span>🎬 Remotion 멀티트랙 스튜디오로 열기 (비주얼+해설오디오+자막 자동 배치)</span>
+            <span>🎬 Remotion 멀티트랙 스튜디오로 열기 (비주얼+번역나레이션+자막 자동 동기화)</span>
           </button>
           <button type="button" class="btn-bridge-scene" id="ytBtnSendToScene">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -409,13 +478,13 @@
 
         <!-- Analyzed Sources Grid -->
         <div class="yt-sources-section">
-          <div class="form-label" style="margin-bottom: 10px;">분석된 YouTube 영상 소스</div>
+          <div class="form-label" style="margin-bottom: 10px;">번역된 YouTube 영상 원본 소스</div>
           <div class="yt-sources-grid" id="ytSourcesList"></div>
         </div>
 
         <!-- Explanatory Narration Sections -->
         <div class="yt-dialogue-section">
-          <div class="form-label" style="margin-bottom: 12px;">구조화된 한국어 해설 리포트 (문단/타임스탬프 클릭 시 해당 위치 재생)</div>
+          <div class="form-label" style="margin-bottom: 12px;">구조화된 한국어 충실 번역 리포트 (문단/타임스탬프 클릭 시 해당 위치 재생)</div>
           <div class="yt-dialogue-list" id="ytDialogueList"></div>
         </div>
       </div>

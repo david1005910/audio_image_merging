@@ -2655,3 +2655,177 @@ input[type="range"]::-webkit-slider-thumb:hover {
   color: #d1d5db;
   letter-spacing: -0.2px;
 }
+
+/* ==========================================
+   Target Duration Controls & Comparison Bar
+   ========================================== */
+.yt-duration-container {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.duration-preset-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.btn-duration-preset {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+  text-align: center;
+}
+
+.btn-duration-preset:hover {
+  background: rgba(0, 242, 254, 0.06);
+  border-color: rgba(0, 242, 254, 0.4);
+  transform: translateY(-2px);
+}
+
+.btn-duration-preset.active {
+  background: linear-gradient(135deg, rgba(0, 242, 254, 0.15), rgba(121, 40, 202, 0.15));
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 16px rgba(0, 242, 254, 0.25);
+}
+
+.btn-duration-preset .d-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.btn-duration-preset .d-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.btn-duration-preset .d-sub {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.btn-duration-preset .d-badge-def {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 9px;
+  font-weight: 800;
+  background: rgba(0, 242, 254, 0.25);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(0, 242, 254, 0.5);
+  border-radius: 4px;
+  padding: 1px 4px;
+  line-height: 1;
+}
+
+.custom-duration-row {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px dashed rgba(0, 242, 254, 0.35);
+  border-radius: var(--radius-md);
+  animation: fadeIn 0.25s ease-in-out;
+}
+
+.custom-duration-flex {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.custom-duration-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.custom-dur-input {
+  width: 90px !important;
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  padding: 8px 10px !important;
+}
+
+.custom-unit-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.custom-char-estimate {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-cyan);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Target Duration vs Actual Duration Comparison Bar */
+.yt-duration-compare-bar {
+  margin: 14px 0 18px 0;
+  padding: 12px 20px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(0, 242, 254, 0.25);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 16px;
+  flex-wrap: wrap;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.dur-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dur-stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.dur-stat-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.dur-stat-val.active-green {
+  color: #10b981;
+}
+
+.dur-stat-val.stat-badge-match {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-weight: 800;
+}
+
+.dur-stat-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+}
+

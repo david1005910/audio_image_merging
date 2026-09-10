@@ -376,7 +376,7 @@ def _run_job(job_id):
             job["finished"] = time.time()
 
 
-def _run_youtube_job(job_id, urls, api_key, language, tone, voice=None):
+def _run_youtube_job(job_id, urls, api_key, language, tone, voice=None, target_duration=180):
     with YT_LOCK:
         job = YT_JOBS.get(job_id)
     if not job:
@@ -398,12 +398,18 @@ def _run_youtube_job(job_id, urls, api_key, language, tone, voice=None):
         if not sources:
             raise ValueError("입력된 YouTube URL에서 유효한 영상을 찾을 수 없습니다.")
 
-        progress_cb(35, f"{len(sources)}개 영상 분석 완료. Gemini AI 한국어 해설 대본 작성 중...")
-        script = generate_korean_explainer_script_gemini(sources, api_key, language, tone)
+        progress_cb(35, f"{len(sources)}개 영상 분석 완료. Gemini AI 시간 맞춤형({target_duration}초) 한국어 대본 작성 중...")
+        script = generate_korean_explainer_script_gemini(
+            sources=sources,
+            api_key=api_key,
+            language=language,
+            tone=tone,
+            target_duration=target_duration
+        )
         if not script:
             raise ValueError("한국어 해설 대본 생성에 실패했습니다.")
 
-        progress_cb(50, "한국어 전문 해설 음성 합성 (Edge-TTS) 진행 중...")
+        progress_cb(50, f"한국어 전문 해설 음성 합성 (Edge-TTS, 목표: {target_duration}초) 진행 중...")
         out_mp3_path = os.path.join(OUTPUT_DIR, f"yt_explainer_{job_id}.mp3")
 
         result = synthesize_explainer_audio_and_timeline(
@@ -412,17 +418,19 @@ def _run_youtube_job(job_id, urls, api_key, language, tone, voice=None):
             output_mp3_path=out_mp3_path,
             voice=voice or "ko-KR-InJoonNeural",
             language=language,
+            target_duration=target_duration,
             progress_callback=progress_cb
         )
 
         with YT_LOCK:
             job["status"] = "done"
             job["progress"] = 100
-            job["stage"] = "✨ AI 한국어 해설 오디오 완성!"
+            job["stage"] = "✨ AI 한국어 충실 번역 나레이션 오디오 완성!"
             job["result"] = {
                 "audio_url": f"/download/{os.path.basename(out_mp3_path)}",
                 "audio_file": out_mp3_path,
                 "duration": result["duration"],
+                "target_duration": result.get("target_duration", target_duration),
                 "script": result["script"],
                 "subtitles": result["subtitles"],
                 "timeline_data": result["timeline_data"],
@@ -652,8 +660,13 @@ class Handler(BaseHTTPRequestHandler):
 
             api_key = str(data.get("api_key") or "").strip() or None
             language = str(data.get("language") or "ko")
-            tone = str(data.get("tone") or "deep_dive")
+            tone = str(data.get("tone") or "faithful")
             voice = str(data.get("voice") or "ko-KR-InJoonNeural")
+            try:
+                target_duration = int(data.get("target_duration") or 180)
+                target_duration = max(30, min(600, target_duration))
+            except (TypeError, ValueError):
+                target_duration = 180
 
             job_id = uuid.uuid4().hex[:12]
             with YT_LOCK:
@@ -669,7 +682,7 @@ class Handler(BaseHTTPRequestHandler):
 
             threading.Thread(
                 target=_run_youtube_job,
-                args=(job_id, urls, api_key, language, tone, voice),
+                args=(job_id, urls, api_key, language, tone, voice, target_duration),
                 daemon=True
             ).start()
 

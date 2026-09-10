@@ -13,6 +13,8 @@
       this.pollTimer = null;
       this.lastResult = null;
       this.audioPlayer = null;
+      this.selectedDuration = 180;
+      this.isCustomDuration = false;
 
       this.dom = {};
     }
@@ -21,6 +23,7 @@
       this._bindDOMElements();
       this._loadStoredApiKey();
       this._bindEvents();
+      this._updateDurationDisplay();
     }
 
     _bindDOMElements() {
@@ -29,6 +32,19 @@
       this.dom.voiceSelect = document.getElementById('ytVoiceSelect');
       this.dom.toneSelect = document.getElementById('ytToneSelect');
       this.dom.btnGenerate = document.getElementById('btnGenerateYtOverview');
+
+      // Duration Controls
+      this.dom.durationPresetGroup = document.getElementById('ytDurationPresetGroup');
+      this.dom.durationPresetBtns = document.querySelectorAll('.btn-duration-preset');
+      this.dom.durationValBadge = document.getElementById('ytDurationValBadge');
+      this.dom.customDurationRow = document.getElementById('ytCustomDurationRow');
+      this.dom.customDurationInput = document.getElementById('ytCustomDurationInput');
+      this.dom.charEstimate = document.getElementById('ytCharEstimate');
+
+      // Duration Stat Comparison
+      this.dom.statTargetDur = document.getElementById('ytStatTargetDur');
+      this.dom.statActualDur = document.getElementById('ytStatActualDur');
+      this.dom.statMatchRate = document.getElementById('ytStatMatchRate');
 
       // Progress / Monitor
       this.dom.monitorBox = document.getElementById('ytMonitorBox');
@@ -64,6 +80,41 @@
         });
       }
 
+      // Duration Presets
+      if (this.dom.durationPresetBtns) {
+        this.dom.durationPresetBtns.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const d = btn.dataset.duration;
+            this.dom.durationPresetBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            if (d === 'custom') {
+              this.isCustomDuration = true;
+              if (this.dom.customDurationRow) this.dom.customDurationRow.style.display = 'block';
+              const customSec = parseInt(this.dom.customDurationInput ? this.dom.customDurationInput.value : 180, 10) || 180;
+              this.selectedDuration = Math.max(30, Math.min(600, customSec));
+            } else {
+              this.isCustomDuration = false;
+              if (this.dom.customDurationRow) this.dom.customDurationRow.style.display = 'none';
+              this.selectedDuration = parseInt(d, 10);
+            }
+            this._updateDurationDisplay();
+          });
+        });
+      }
+
+      // Custom Duration Input
+      if (this.dom.customDurationInput) {
+        this.dom.customDurationInput.addEventListener('input', (e) => {
+          let val = parseInt(e.target.value, 10);
+          if (!isNaN(val)) {
+            val = Math.max(30, Math.min(600, val));
+            this.selectedDuration = val;
+            this._updateDurationDisplay();
+          }
+        });
+      }
+
       if (this.dom.btnGenerate) {
         this.dom.btnGenerate.addEventListener('click', () => this.startGeneration());
       }
@@ -77,10 +128,24 @@
       }
     }
 
+    _updateDurationDisplay() {
+      const sec = this.selectedDuration;
+      const min = Math.floor(sec / 60);
+      const rem = sec % 60;
+      const minText = rem > 0 ? `${min}분 ${rem}초 (${sec}초)` : `${min}분 (${sec}초)`;
+      if (this.dom.durationValBadge) {
+        this.dom.durationValBadge.textContent = minText;
+      }
+      const estChars = Math.round(Math.max(25, sec - 1.5) * 4.3);
+      if (this.dom.charEstimate) {
+        this.dom.charEstimate.textContent = `예상 생성 분량: 약 ${estChars}자 (±10%)`;
+      }
+    }
+
     async startGeneration() {
       const rawUrls = (this.dom.urlTextarea.value || '').trim();
       if (!rawUrls) {
-        alert('분석할 YouTube 영상 링크를 최소 1개 이상 입력해주세요.');
+        alert('번역할 YouTube 영상 링크를 최소 1개 이상 입력해주세요.');
         this.dom.urlTextarea.focus();
         return;
       }
@@ -102,7 +167,8 @@
       }
 
       const voice = this.dom.voiceSelect ? this.dom.voiceSelect.value : 'ko-KR-InJoonNeural';
-      const tone = this.dom.toneSelect ? this.dom.toneSelect.value : 'deep_dive';
+      const tone = this.dom.toneSelect ? this.dom.toneSelect.value : 'faithful';
+      const targetDuration = this.selectedDuration || 180;
 
       // UI state
       this.dom.btnGenerate.disabled = true;
@@ -110,13 +176,20 @@
       this.dom.resultSection.style.display = 'none';
       this.dom.progressFill.style.width = '5%';
       this.dom.percentText.textContent = '5%';
-      this.dom.stageText.textContent = 'YouTube 영상 목록 분석 준비 중...';
+      this.dom.stageText.textContent = `YouTube 영상 분석 및 시간 맞춤형(${targetDuration}초) 번역 준비 중...`;
 
       try {
         const resp = await fetch('/api/youtube/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ urls, api_key: apiKey, voice, tone, language: 'ko' })
+          body: JSON.stringify({
+            urls,
+            api_key: apiKey,
+            voice,
+            tone,
+            language: 'ko',
+            target_duration: targetDuration
+          })
         });
 
         const data = await resp.json();
@@ -169,6 +242,26 @@
     _renderResults(result) {
       this.dom.monitorBox.style.display = 'none';
       this.dom.resultSection.style.display = 'block';
+
+      // Duration comparison stats
+      const targetSec = parseInt(result.target_duration || this.selectedDuration || 180, 10);
+      const actualSec = parseFloat(result.duration || 0);
+
+      if (this.dom.statTargetDur) {
+        const tm = Math.floor(targetSec / 60);
+        const ts = targetSec % 60;
+        this.dom.statTargetDur.textContent = `${targetSec}초 (${tm}분 ${ts}초)`;
+      }
+      if (this.dom.statActualDur) {
+        const am = Math.floor(actualSec / 60);
+        const as = Math.round(actualSec % 60);
+        this.dom.statActualDur.textContent = `${actualSec.toFixed(1)}초 (${am}분 ${as}초)`;
+      }
+      if (this.dom.statMatchRate) {
+        const diff = Math.abs(actualSec - targetSec);
+        const rate = Math.max(0, Math.min(100, (1 - diff / targetSec) * 100));
+        this.dom.statMatchRate.textContent = `${rate.toFixed(1)}%`;
+      }
 
       // 1. Audio Player
       if (this.dom.audioPlayerEl && result.audio_url) {
