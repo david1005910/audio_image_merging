@@ -8,7 +8,7 @@ Python scripts that shell out to `ffmpeg` to produce 1080p MP4 videos from audio
 
 ## Entry points
 - **`webui.py`** — Fullstack HTTP server (stdlib `ThreadingHTTPServer`) with a modern Korean-language studio Web UI (`http://127.0.0.1:8080`). Run: `python webui.py [port]` (default `8080`).
-- **`youtube_audio_overview.py`** — NotebookLM-style multi-source YouTube transcript extractor, Google Gemini AI 2-host podcast dialog generator, Edge-TTS audio synthesizer, and Remotion timeline exporter.
+- **`youtube_audio_overview.py`** — Multi-source YouTube transcript extractor, Google Gemini AI Korean explanatory narration generator (for English & multilingual videos), Edge-TTS single-voice audio synthesizer, and Remotion timeline exporter.
 - **`remotion_engine.py`** — Remotion-style multi-track timeline video compiler (visual, audio, subtitle tracks) to 1080p MP4.
 - **`scene_video.py`** — Multi-scene narration subtitle video generator with auto-sentence distribution.
 - `waveform_video.py` — audio → waveform visualization (`showwaves`, `mode=cline`). Supports custom `wave_color` and real-time progress callbacks.
@@ -18,11 +18,11 @@ Python scripts that shell out to `ffmpeg` to produce 1080p MP4 videos from audio
 
 ## Fullstack WebUI Architecture
 - **Templates & Static Assets**:
-  - `templates/index.html` — Semantic HTML5 studio UI with drag-and-drop, Remotion timeline editor, Scene subtitle editor, YouTube AI Audio Overview, and in-browser video player modal.
-  - `static/css/style.css` — Modern dark glassmorphism design system (`Inter`, `JetBrains Mono`, neon glows, dialogue chat bubbles).
+  - `templates/index.html` — Semantic HTML5 studio UI with drag-and-drop, Remotion timeline editor, Scene subtitle editor, YouTube AI Korean Explainer Audio Overview, and in-browser video player modal.
+  - `static/css/style.css` — Modern dark glassmorphism design system (`Inter`, `JetBrains Mono`, neon glows, structured explainer report cards).
   - `static/js/app.js` — Frontend state machine, canvas layout mockup renderer, REST API polling, and library manager.
   - `static/js/remotion_editor.js` — Remotion-style multi-track timeline editor frontend engine.
-  - `static/js/youtube_overview.js` — Multi-YouTube analyzer, Gemini API key manager, 2-host audio player & interactive transcript viewer, 1-click Remotion/Scene Studio bridge.
+  - `static/js/youtube_overview.js` — Multi-YouTube analyzer, Gemini API key manager, Korean explanatory audio player & interactive report viewer, 1-click Remotion/Scene Studio bridge.
   - `static/js/audio_preview.js` — In-browser Web Audio API waveform visualizer and audio playback previewer.
 - **REST API Endpoints**:
   - `GET /` — Serves `templates/index.html`.

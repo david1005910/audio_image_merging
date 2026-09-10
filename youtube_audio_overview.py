@@ -111,7 +111,12 @@ def fetch_youtube_transcript(video_id: str) -> str:
         transcript = api.fetch(video_id, languages=["ko", "en"])
         lines = []
         for item in transcript:
-            t = item.get("text", "").strip()
+            if hasattr(item, "text"):
+                t = str(item.text).strip()
+            elif isinstance(item, dict):
+                t = str(item.get("text", "")).strip()
+            else:
+                t = str(item).strip()
             if t:
                 lines.append(t)
         return " ".join(lines)
@@ -140,17 +145,17 @@ def process_youtube_urls(urls: List[str], save_dir: str) -> List[Dict[str, Any]]
 
 
 # ==========================================
-# 2. Gemini AI 2인 대화 팟캐스트 대본 생성기
+# 2. Gemini AI 한국어 심층 해설 스크립트 생성기 (Single Explainer)
 # ==========================================
-def generate_podcast_script_gemini(
+def generate_korean_explainer_script_gemini(
     sources: List[Dict[str, Any]],
     api_key: Optional[str] = None,
     language: str = "ko",
     tone: str = "deep_dive"
 ) -> List[Dict[str, str]]:
     """
-    수집된 YouTube 소스들을 Google Gemini API를 호출하여
-    NotebookLM 스타일의 2인 호스트(민수, 지우) 대화형 팟캐스트 대본으로 작성합니다.
+    수집된 YouTube 소스(영어/외국어 포함)를 Google Gemini AI로 심층 분석하여
+    한국인 청취자가 쉽게 이해할 수 있는 전문 해설가 1인 나레이션 스크립트를 생성합니다.
     """
     # 1. 소스 컨텍스트 조립
     source_context = ""
@@ -161,35 +166,50 @@ def generate_podcast_script_gemini(
         source_context += f"\n\n### [영상 소스 {idx}]\n- 제목: {s.get('title')}\n- 채널: {s.get('author')}\n- 내용/자막 요약:\n{t_snippet or '(자막이 제공되지 않아 제목과 주제를 중심으로 분석해 주세요)'}"
 
     # 2. 시스템 프롬프트 작성
-    lang_instruction = "대화 내용은 반드시 자연스러운 한국어로 작성하세요." if language == "ko" else "Write the conversation naturally in English."
-    host_a_name = "민수" if language == "ko" else "Alex"
-    host_b_name = "지우" if language == "ko" else "Sarah"
-
     tone_instruction = {
-        "deep_dive": "다양한 시각과 깊이 있는 분석, 비유를 활용하여 알기 쉽게 풀어나가는 심층 분석(Deep Dive) 스타일",
-        "summary": "핵심 요점과 빠른 팩트 위주로 짚어주는 스마트 요약 스타일",
-        "debate": "두 진행자가 상반된 시각과 의문을 제기하며 핑퐁식으로 의견을 나누는 토론 스타일"
-    }.get(tone, "심층 분석 스타일")
+        "deep_dive": "배경 지식과 원리를 상세히 풀어서 차근차근 설명해주는 친절한 심층 해설 스타일",
+        "summary": "핵심 요약과 팩트 위주로 빠르게 정리해주는 3분 핵심 요약 스타일",
+        "actionable": "실무 적용 방안과 핵심 인사이트, 청취자가 바로 써먹을 수 있는 팁 중심 스타일"
+    }.get(tone, "심층 해설 스타일")
 
-    prompt = f"""당신은 Google NotebookLM의 'Audio Overview' 전문 팟캐스트 총괄 프로듀서입니다.
-제공된 다수의 YouTube 영상들의 내용을 깊이 있게 교차 분석하여, 두 명의 AI 호스트가 생생하게 대화하는 팟캐스트 오디오 대본을 작성해주세요.
+    prompt = f"""당신은 세계적인 최신 테크 및 지식 콘텐츠를 분석하여 대중에게 알기 쉽게 전달하는 최고 수준의 전문 한국어 해설가(Explainer & Insight Analyst)입니다.
+제공된 YouTube 영상들의 내용(영어 또는 외국어 원본 포함)을 꼼꼼히 파악하여, 한국 청취자가 귀로 들었을 때 바로 이해할 수 있는 '한국어 심층 해설 오디오 나레이션 스크립트'를 작성해주세요.
 
-[진행자 구성]
-- 호스트 A (남성: {host_a_name}): 대화를 주도하며 주제를 도입하고 핵심 포인트를 흥미롭게 짚어주는 인물.
-- 호스트 B (여성: {host_b_name}): 날카로운 질문을 던지거나 공감하며, 다른 영상의 관점을 연결해주는 인물.
-
-[대화 규칙]
-1. {lang_instruction}
-2. 어조: {tone_instruction}
-3. 단순히 내용을 읊는 것이 아니라, "맞아요!", "정말 흥미롭네요", "이 영상에서는 그렇게 봤는데, 다른 영상에선 반대로..." 처럼 실제 인간 팟캐스트처럼 자연스러운 맞장구, 추임새, 감탄사를 적극 활용하세요.
-4. 제공된 여러 YouTube 영상 간의 공통점, 차이점, 핵심 인사이트를 비교하며 논의하세요.
-5. 대화는 약 10~18턴 내외로 구성하여 풍부하고 완결성 있게 마무리하세요.
-6. 출력 형식은 반드시 아래와 같은 JSON 배열 형식으로만 응답하세요. 마크다운 태그(```json 등)는 제외하거나 순수 JSON만 반환하세요.
+[필수 작성 규칙]:
+1. **언어**: 원본 영상이 영어나 외국어이더라도, 해설은 반드시 **자연스럽고 유려한 고품질 한국어**로 작성하세요. 단순 번역이 아니라 맥락과 배경을 살린 설명이어야 합니다.
+2. **화자 구성**: 2인 대화(팟캐스트)가 아닌, **단독 1인 전문 해설가의 나레이션(독백)** 형식입니다.
+3. **어조**: 신뢰감 있고 친절하며 귀에 쏙쏙 들어오는 구어체 (해요체와 하십시오체를 자연스럽게 혼용, 예: '~합니다', '~인데요', '~살펴보겠습니다').
+4. **용어 설명**: 어려운 영문 기술 용어나 개념은 청취자가 알기 쉽게 풀어서 설명하고 필요 시 괄호 병기하세요 (예: 거대언어모델(LLM), 검색증강생성(RAG) 등).
+5. **어조/스타일**: {tone_instruction}
+6. **섹션 구성**: 약 4~6개의 논리적 문단으로 구성하세요:
+   - 1) 도입 (영상 주제 소개 및 이 내용이 왜 중요한지 배경 설명)
+   - 2) 핵심 분석 1 (영상 원문이 제시하는 핵심 원리, 주요 주장 및 데이터 해설)
+   - 3) 핵심 분석 2 (적용 사례, 한계점 또는 여러 영상 간의 시너지/비교 분석)
+   - 4) 결론 및 시사점 (청취자를 위한 핵심 요약 및 최종 인사이트 정리)
+7. 출력 형식은 반드시 아래와 같은 JSON 배열 형식으로만 응답하세요. 마크다운 태그(```json 등)는 제외하거나 순수 JSON만 반환하세요.
 
 [JSON 출력 형식 예시]:
 [
-  {{"speaker": "Host_A", "name": "{host_a_name}", "text": "반갑습니다, 여러분! 오늘 함께 살펴볼 영상들이 정말 흥미진진한데요."}},
-  {{"speaker": "Host_B", "name": "{host_b_name}", "text": "맞아요 {host_a_name}님! 특히 첫 번째 영상과 두 번째 영상의 관점이 묘하게 엇갈리는 부분이 아주 인상 깊었어요."}}
+  {{
+    "section": "도입",
+    "title": "주제 소개 및 배경",
+    "text": "안녕하세요. 오늘 함께 살펴볼 영상은 최근 주목받고 있는 인공지능 에이전트의 발전 흐름을 다룬 콘텐츠입니다."
+  }},
+  {{
+    "section": "핵심 해설 1",
+    "title": "원문의 핵심 주장 분석",
+    "text": "영상에서는 특히 기존 언어모델의 한계를 극복하기 위해 다중 에이전트 협업 구조가 왜 필수적인지를 실제 벤치마크 데이터를 통해 입증하고 있습니다."
+  }},
+  {{
+    "section": "핵심 해설 2",
+    "title": "심층 시사점 및 비교",
+    "text": "흥미로운 점은 단순히 모델의 크기만 키우는 것이 아니라, 도구 사용과 피드백 루프를 결합했을 때 성능이 비약적으로 상승한다는 분석입니다."
+  }},
+  {{
+    "section": "결론",
+    "title": "핵심 요약 및 총평",
+    "text": "결국 이번 영상이 전하는 핵심 메시지는 자동화를 넘어 자율적으로 문제를 해결하는 시스템으로의 패러다임 전환입니다. 여러분의 프로젝트에도 이러한 관점을 적극 접목해보시기 바랍니다."
+  }}
 ]
 
 [분석할 YouTube 영상 소스 목록]:
@@ -200,7 +220,7 @@ def generate_podcast_script_gemini(
 
     if gemini_key:
         try:
-            # Gemini 2.0 Flash / 1.5 Flash 호출
+            # Gemini 2.0 Flash 호출
             api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
@@ -222,55 +242,88 @@ def generate_podcast_script_gemini(
                     cleaned = cleaned[7:]
                 if cleaned.endswith("```"):
                     cleaned = cleaned[:-3]
-                turns = json.loads(cleaned.strip())
-                if isinstance(turns, list) and len(turns) > 0:
-                    return turns
+                sections = json.loads(cleaned.strip())
+                if isinstance(sections, list) and len(sections) > 0:
+                    return sections
         except Exception as e:
-            print(f"[Gemini API] Call error: {e}, falling back to built-in smart synthesis.")
+            print(f"[Gemini API] Call error: {e}, falling back to built-in smart explainer.")
 
-    # API 키가 없거나 실패한 경우: 고품질 내장 분석 엔진(Smart Synthesizer)으로 생성
-    return _generate_smart_fallback_script(sources, language, host_a_name, host_b_name)
+    # API 키가 없거나 호출 실패 시 스마트 폴백 해설 생성
+    return _generate_smart_fallback_explainer_script(sources, language)
 
 
-def _generate_smart_fallback_script(
+def _generate_smart_fallback_explainer_script(
     sources: List[Dict[str, Any]],
-    language: str,
-    host_a: str,
-    host_b: str
+    language: str = "ko"
 ) -> List[Dict[str, str]]:
-    """API 키 미등록 시에도 즉시 체험 가능한 고품질 교차 분석 대화 템플릿 엔진"""
-    title1 = sources[0].get("title", "첫 번째 영상") if len(sources) > 0 else "첫 번째 주제"
-    author1 = sources[0].get("author", "크리에이터 A") if len(sources) > 0 else ""
-    title2 = sources[1].get("title", "두 번째 영상") if len(sources) > 1 else "두 번째 주제"
-    author2 = sources[1].get("author", "크리에이터 B") if len(sources) > 1 else ""
+    """API 키 미등록 시에도 즉시 동작하는 고품질 한국어 단독 해설 템플릿 엔진"""
+    title1 = sources[0].get("title", "YouTube 영상") if len(sources) > 0 else "주요 영상 콘텐츠"
+    author1 = sources[0].get("author", "글로벌 크리에이터") if len(sources) > 0 else ""
+    title2 = sources[1].get("title", "두 번째 영상") if len(sources) > 1 else ""
+    author2 = sources[1].get("author", "") if len(sources) > 1 else ""
 
     if language == "ko":
-        return [
-            {"speaker": "Host_A", "name": host_a, "text": f"안녕하세요 여러분! 오늘 NotebookLM 스튜디오에서는 주목받는 YouTube 콘텐츠들을 교차 분석해보려 합니다."},
-            {"speaker": "Host_B", "name": host_b, "text": f"반갑습니다 {host_a}님! 오늘 다룰 영상들이 정말 흥미로운 공통점과 차이점을 담고 있더라고요."},
-            {"speaker": "Host_A", "name": host_a, "text": f"맞습니다. 우선 '{title1}' 영상을 살펴보면, 핵심적인 현상과 변화를 아주 명쾌하게 짚어내고 있어요."},
-            {"speaker": "Host_B", "name": host_b, "text": f"그렇죠! 특히 {author1} 채널에서 제시한 데이터와 시사점이 많은 시청자들의 큰 공감을 얻고 있는 것 같아요."},
-            {"speaker": "Host_A", "name": host_a, "text": f"그런데 이어서 살펴본 '{title2}'에서는 또 다른 흥미로운 각도로 이 문제를 접근하더라고요."},
-            {"speaker": "Host_B", "name": host_b, "text": f"네, 단순히 한쪽 의견에 치우치지 않고 실질적인 영향과 미래 전망까지 폭넓게 짚어주는 점이 인상적이었습니다."},
-            {"speaker": "Host_A", "name": host_a, "text": f"두 영상을 종합해보면, 결국 변화의 본질을 이해하고 빠르게 대응하는 것이 가장 중요한 핵심 키워드인 것 같습니다."},
-            {"speaker": "Host_B", "name": host_b, "text": f"정확한 요약이네요. 이번 AI 오버뷰 분석이 시청자 여러분의 인사이트 확장에 큰 도움이 되었으면 좋겠습니다!"}
+        result = [
+            {
+                "section": "도입",
+                "title": "주제 소개 및 배경",
+                "text": f"안녕하세요. 오늘 함께 살펴볼 영상은 {author1} 채널의 '{title1}'입니다. 이 콘텐츠는 최근 업계와 대중의 뜨거운 관심을 받고 있는 핵심 화두를 매우 깊이 있게 다루고 있습니다."
+            },
+            {
+                "section": "핵심 해설 1",
+                "title": "원문의 핵심 내용과 논점",
+                "text": f"원문 영상의 핵심을 정리해보면, 복잡한 이론이나 기술적 원리를 누구나 직관적으로 이해할 수 있도록 실제 사례와 명확한 근거 데이터를 통해 설명하고 있습니다. 특히 기존의 한계점을 극복하기 위한 새로운 접근법이 매우 인상적입니다."
+            }
         ]
+
+        if title2:
+            result.append({
+                "section": "핵심 해설 2",
+                "title": "다중 소스 교차 분석",
+                "text": f"또한 이어서 살펴본 {author2}의 '{title2}' 영상과 대조해보면 또 다른 중요한 시사점이 발견됩니다. 첫 번째 영상이 문제 정의와 방법론에 집중했다면, 두 번째 영상은 이를 실질적으로 응용하고 확장하는 방안에 주목하고 있습니다."
+            })
+        else:
+            result.append({
+                "section": "핵심 해설 2",
+                "title": "심층 시사점 및 실무 가치",
+                "text": "영상에서 특히 강조하는 부분은, 단순히 트렌드를 쫓아가는 데 그치지 않고 본질적인 메커니즘을 이해하고 이를 자신의 업무나 프로젝트에 능동적으로 적용하는 통찰력의 중요성입니다."
+            })
+
+        result.append({
+            "section": "결론",
+            "title": "핵심 요약 및 총평",
+            "text": "종합해보면, 이번 영상은 새로운 패러다임 속에서 우리가 어떤 방향성을 가지고 준비해야 할지 명쾌한 가이드를 제공합니다. 핵심 포인트를 잘 기억해 두시면 앞으로의 의사결정에 큰 도움이 될 것입니다."
+        })
+        return result
     else:
         return [
-            {"speaker": "Host_A", "name": host_a, "text": f"Welcome everyone to today's NotebookLM AI Audio Overview!"},
-            {"speaker": "Host_B", "name": host_b, "text": f"Great to be here {host_a}. Today we're diving deep into some fascinating YouTube discussions."},
-            {"speaker": "Host_A", "name": host_a, "text": f"Exactly. Starting with '{title1}', the creators really highlighted some critical breakthroughs."},
-            {"speaker": "Host_B", "name": host_b, "text": f"I loved that point. But when you cross-reference it with '{title2}', a whole new perspective emerges."},
-            {"speaker": "Host_A", "name": host_a, "text": f"That's the real power of analyzing both sources together. It reveals the bigger picture."},
-            {"speaker": "Host_B", "name": host_b, "text": f"Totally agree! Hope this gives everyone a clear, comprehensive breakdown of what's happening."}
+            {
+                "section": "Introduction",
+                "title": "Overview and Context",
+                "text": f"Hello everyone. Today we are breaking down the key insights from '{title1}' by {author1}."
+            },
+            {
+                "section": "Key Analysis",
+                "title": "Core Breakdown",
+                "text": "The presentation details the critical breakthrough moments, highlighting how recent advancements overcome longstanding bottlenecks."
+            },
+            {
+                "section": "Conclusion",
+                "title": "Summary & Takeaways",
+                "text": "In conclusion, this video offers an essential roadmap for navigating upcoming changes. Keep these key takeaways in mind as you move forward."
+            }
         ]
 
 
+# 하위 호환성 별칭
+generate_podcast_script_gemini = generate_korean_explainer_script_gemini
+
+
 # ==========================================
-# 3. Edge-TTS 듀얼 스피커 음성 합성 및 자막 빌드
+# 3. Edge-TTS 단일 해설가 음성 합성 및 타임라인 빌드
 # ==========================================
 async def _synthesize_turn(text: str, voice: str, output_file: str):
-    """단일 대화 턴을 Edge-TTS로 음성 합성합니다."""
+    """단일 문단/턴을 Edge-TTS로 음성 합성합니다."""
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_file)
 
@@ -288,27 +341,24 @@ def _get_audio_duration_ffprobe(file_path: str) -> float:
         return 3.0
 
 
-def synthesize_podcast_audio_and_timeline(
-    script_turns: List[Dict[str, str]],
+def synthesize_explainer_audio_and_timeline(
+    script_sections: List[Dict[str, str]],
     sources: List[Dict[str, Any]],
     output_mp3_path: str,
+    voice: str = "ko-KR-InJoonNeural",
     language: str = "ko",
     progress_callback=None
 ) -> Dict[str, Any]:
     """
-    대본의 턴들을 듀얼 스피커 음성으로 합성하고,
-    FFmpeg로 병합하여 최종 오디오 및 Remotion 타임라인 데이터를 생성합니다.
+    한국어 해설 리포트 문단들을 선택된 단일 AI 음성으로 합성하고,
+    FFmpeg로 병합하여 최종 해설 오디오 및 Remotion 1080p 타임라인을 생성합니다.
     """
     if not edge_tts:
         raise RuntimeError("edge-tts 라이브러리가 설치되어 있지 않습니다.")
 
-    # 음성 매핑
-    if language == "ko":
-        voice_a = "ko-KR-InJoonNeural"  # 남성
-        voice_b = "ko-KR-SunHiNeural"   # 여성
-    else:
-        voice_a = "en-US-GuyNeural"
-        voice_b = "en-US-JennyNeural"
+    # 기본 음성 결정
+    if not voice:
+        voice = "ko-KR-InJoonNeural" if language == "ko" else "en-US-GuyNeural"
 
     work_dir = os.path.dirname(output_mp3_path)
     os.makedirs(work_dir, exist_ok=True)
@@ -316,49 +366,50 @@ def synthesize_podcast_audio_and_timeline(
     temp_files = []
     subtitles = []
     current_time = 0.0
-    total_turns = len(script_turns)
+    total_sections = len(script_sections)
 
-    # 1. 턴별 TTS 합성
-    for idx, turn in enumerate(script_turns):
+    # 1. 문단별 TTS 합성
+    for idx, sec in enumerate(script_sections):
+        sec_title = sec.get("title", f"섹션 {idx+1}")
+        sec_name = sec.get("section", "해설")
+        text = sec.get("text", "")
+
         if progress_callback:
-            progress_callback(int((idx / total_turns) * 60) + 10, f"음성 합성 중: {turn.get('name', '호스트')} ({idx+1}/{total_turns})")
+            percent = int((idx / total_sections) * 60) + 15
+            progress_callback(percent, f"한국어 해설 음성 합성 중: [{sec_name}] {sec_title} ({idx+1}/{total_sections})")
 
-        speaker = turn.get("speaker", "Host_A")
-        name = turn.get("name", "호스트")
-        text = turn.get("text", "")
-        voice = voice_a if speaker == "Host_A" else voice_b
+        sec_file = os.path.join(work_dir, f"sec_{idx:03d}.mp3")
+        asyncio.run(_synthesize_turn(text, voice, sec_file))
+        temp_files.append(sec_file)
 
-        turn_file = os.path.join(work_dir, f"turn_{idx:03d}_{speaker}.mp3")
-        asyncio.run(_synthesize_turn(text, voice, turn_file))
-        temp_files.append(turn_file)
-
-        dur = _get_audio_duration_ffprobe(turn_file)
+        dur = _get_audio_duration_ffprobe(sec_file)
         start_t = current_time
         end_t = start_t + dur
 
         subtitles.append({
-            "id": f"sub_turn_{idx}",
+            "id": f"sub_sec_{idx}",
             "start": round(start_t, 2),
             "end": round(end_t, 2),
-            "speaker": speaker,
-            "name": name,
-            "text": f"[{name}] {text}",
+            "speaker": "Narrator",
+            "name": sec_name,
+            "title": sec_title,
+            "text": text,
             "font_size": 32,
-            "font_color": "#00f2fe" if speaker == "Host_A" else "#ff0080",
+            "font_color": "#00f2fe",
             "bg_style": "box",
             "position": "bottom"
         })
 
-        # 턴 사이 0.2초 자연스러운 간격
-        current_time = end_t + 0.2
+        # 문단 사이 0.35초의 자연스러운 호흡(Pause) 간격
+        current_time = end_t + 0.35
 
     total_duration = round(current_time, 2)
 
-    # 2. FFmpeg로 모든 턴 MP3 병합
+    # 2. FFmpeg로 모든 문단 MP3 병합
     if progress_callback:
-        progress_callback(75, "오디오 트랙 병합 및 마스터링 중...")
+        progress_callback(80, "오디오 트랙 결합 및 마스터링 중...")
 
-    concat_txt_path = os.path.join(work_dir, "concat_turns.txt")
+    concat_txt_path = os.path.join(work_dir, "concat_sections.txt")
     with open(concat_txt_path, "w", encoding="utf-8") as f:
         for tf in temp_files:
             clean_path = tf.replace("\\", "/")
@@ -374,7 +425,7 @@ def synthesize_podcast_audio_and_timeline(
 
     # 3. 비주얼 트랙 (YouTube 썸네일 배치)
     if progress_callback:
-        progress_callback(90, "타임라인 비주얼 및 자막 동기화 중...")
+        progress_callback(92, "타임라인 비주얼 및 자막 동기화 중...")
 
     visual_track = []
     num_sources = len(sources)
@@ -403,7 +454,7 @@ def synthesize_podcast_audio_and_timeline(
         "audio_track": [
             {
                 "id": "a_yt_overview",
-                "name": "AI Audio Overview (NotebookLM)",
+                "name": "AI Explainer Audio (Korean Narration)",
                 "file_path": output_mp3_path,
                 "start": 0.0,
                 "duration": total_duration,
@@ -430,13 +481,17 @@ def synthesize_podcast_audio_and_timeline(
         pass
 
     if progress_callback:
-        progress_callback(100, "AI Audio Overview 생성 완료!")
+        progress_callback(100, "AI 한국어 해설 오디오 생성 완료!")
 
     return {
         "audio_file": output_mp3_path,
         "duration": total_duration,
-        "script": script_turns,
+        "script": script_sections,
         "subtitles": subtitles,
         "timeline_data": timeline_data,
         "sources": sources
     }
+
+
+# 하위 호환성 별칭
+synthesize_podcast_audio_and_timeline = synthesize_explainer_audio_and_timeline

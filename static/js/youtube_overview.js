@@ -26,7 +26,7 @@
     _bindDOMElements() {
       this.dom.urlTextarea = document.getElementById('ytUrlsInput');
       this.dom.apiKeyInput = document.getElementById('ytApiKeyInput');
-      this.dom.langSelect = document.getElementById('ytLanguageSelect');
+      this.dom.voiceSelect = document.getElementById('ytVoiceSelect');
       this.dom.toneSelect = document.getElementById('ytToneSelect');
       this.dom.btnGenerate = document.getElementById('btnGenerateYtOverview');
 
@@ -101,7 +101,7 @@
         localStorage.setItem('wave_gemini_api_key', apiKey);
       }
 
-      const language = this.dom.langSelect ? this.dom.langSelect.value : 'ko';
+      const voice = this.dom.voiceSelect ? this.dom.voiceSelect.value : 'ko-KR-InJoonNeural';
       const tone = this.dom.toneSelect ? this.dom.toneSelect.value : 'deep_dive';
 
       // UI state
@@ -116,7 +116,7 @@
         const resp = await fetch('/api/youtube/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ urls, api_key: apiKey, language, tone })
+          body: JSON.stringify({ urls, api_key: apiKey, voice, tone, language: 'ko' })
         });
 
         const data = await resp.json();
@@ -201,33 +201,41 @@
         });
       }
 
-      // 3. Render 2-Speaker Dialogue Transcript
+      // 3. Render Structured Explanatory Report Cards
       if (this.dom.dialogueList && result.subtitles) {
         this.dom.dialogueList.innerHTML = '';
-        result.subtitles.forEach((turn) => {
-          const isHostA = turn.speaker === 'Host_A';
-          const bubble = document.createElement('div');
-          bubble.className = `yt-dialogue-bubble ${isHostA ? 'speaker-a' : 'speaker-b'}`;
-          bubble.innerHTML = `
-            <div class="dialogue-avatar">${isHostA ? '🎙️' : '🎧'}</div>
-            <div class="dialogue-body">
-              <div class="dialogue-header">
-                <span class="dialogue-name">${turn.name}</span>
-                <span class="dialogue-timestamp" title="클릭하여 해당 구간 재생">${this._formatSec(turn.start)} ~ ${this._formatSec(turn.end)}</span>
-              </div>
-              <div class="dialogue-text">${turn.text.replace(/^\[.*?\]\s*/, '')}</div>
+        result.subtitles.forEach((item, idx) => {
+          const card = document.createElement('div');
+          card.className = 'yt-explainer-card';
+          card.innerHTML = `
+            <div class="explainer-card-header">
+              <span class="explainer-badge">${item.name || `섹션 ${idx + 1}`}</span>
+              <span class="explainer-title">${item.title || ''}</span>
+              <button type="button" class="explainer-timestamp" title="클릭하여 해당 구간 오디오 재생">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                <span>${this._formatSec(item.start)} ~ ${this._formatSec(item.end)}</span>
+              </button>
             </div>
+            <div class="explainer-text">${item.text}</div>
           `;
 
-          // Click timestamp to seek audio
-          bubble.querySelector('.dialogue-timestamp').addEventListener('click', () => {
+          // Click timestamp or card to seek audio
+          card.querySelector('.explainer-timestamp').addEventListener('click', (e) => {
+            e.stopPropagation();
             if (this.dom.audioPlayerEl) {
-              this.dom.audioPlayerEl.currentTime = turn.start;
+              this.dom.audioPlayerEl.currentTime = item.start;
               this.dom.audioPlayerEl.play();
             }
           });
 
-          this.dom.dialogueList.appendChild(bubble);
+          card.addEventListener('click', () => {
+            if (this.dom.audioPlayerEl) {
+              this.dom.audioPlayerEl.currentTime = item.start;
+              this.dom.audioPlayerEl.play();
+            }
+          });
+
+          this.dom.dialogueList.appendChild(card);
         });
       }
 
@@ -296,7 +304,7 @@
       window.remotionApp.renderTimeline();
       window.remotionApp.renderCanvas();
 
-      alert('🎬 Remotion 멀티트랙 스튜디오로 전송되었습니다!\n비주얼(썸네일), 오디오(팟캐스트 음성), 자막(2인 대화록)이 타임라인에 자동 배치되었습니다.');
+      alert('🎬 Remotion 멀티트랙 스튜디오로 전송되었습니다!\n비주얼(썸네일), 오디오(한국어 해설 음원), 자막(한국어 해설 대본)이 타임라인에 자동 배치되었습니다.');
     }
 
     // ==========================================
